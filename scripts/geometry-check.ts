@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { cablePoints, nodeRect, routeEdges } from '../src/components/canvas/geometry.ts';
+import { cableCorridorGap, cablePoints, NODE_WIDTH, nodeRect, routeEdges, snapToGrid } from '../src/components/canvas/geometry.ts';
 import type { Node, XY } from '../src/types/graph.ts';
 
 const node = (id: string, x: number, y: number): Node => ({ id, label: id, category: 'Custom', headerColor: '#000', position: { x, y }, ports: [], notes: '' });
@@ -14,6 +14,9 @@ const nodes = [node('source', 0, 0), node('blocker', 360, 0), node('target', 720
 const path = cablePoints({ x: 216, y: 48 }, { x: 720, y: 48 }, nodes);
 assert.ok(path.length > 4, 'route should detour around a blocker');
 assert.ok(path.slice(1).every((p, i) => !hits(path[i], p, nodes[1])), 'route must not cross a component');
+assert.equal(cableCorridorGap(0), 72, 'auto-align defaults to three grid snaps');
+assert.equal(cableCorridorGap(2), 72, 'cable corridors retain the three-grid auto-align minimum');
+assert.equal(snapToGrid(NODE_WIDTH + cableCorridorGap(2)) - NODE_WIDTH, 72, 'two lanes retain three grid snaps after alignment');
 
 const routes = routeEdges([
   { id: 'one', source: { x: 216, y: 48 }, target: { x: 720, y: 48 }, sourceNodeId: 'source', targetNodeId: 'target' },

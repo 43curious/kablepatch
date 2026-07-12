@@ -51,6 +51,8 @@ button.primary:hover { background: #1d4ed8; }
 .port-group button, .port-edit button { min-width: 30px; padding: 4px; }
 .drag-handle { padding-top: 8px; color: #64748b; cursor: grab; text-align: center; user-select: none; }
 .form-actions { margin-bottom: 0; }
+.editing-preset { margin: -2px 0 8px; padding: 8px 9px; border-left: 3px solid #2563eb; border-radius: 5px; color: #1e40af; background: #eff6ff; font-size: 12px; }
+.editing-preset b { display: inline; color: inherit; }
 .remove-preset { width: 100%; margin: 0 0 8px; color: #b91c1c; border-color: #fecaca; background: #fff1f2; }
 .remove-preset:hover { background: #ffe4e6; }
 

@@ -10,6 +10,8 @@ export const GROUP_GAP = GRID;
 
 export const snapToGrid = (n: number) => Math.round(n / GRID) * GRID;
 export const snapToHalfGrid = (n: number) => Math.round(n / HALF_GRID) * HALF_GRID;
+/** Minimum component gap required for this many parallel cable lanes. */
+export const cableCorridorGap = (lanes: number) => Math.max(GRID * 3, GRID + lanes * HALF_GRID);
 export const snapXY = (p: XY): XY => ({ x: snapToGrid(p.x), y: snapToGrid(p.y) });
 
 const groupName = (label: string) => label.replace(/\s+\d+$/, '');

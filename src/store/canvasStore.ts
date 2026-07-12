@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { nanoid } from 'nanoid';
 import { CATEGORY_COLORS, NODE_TYPES, templateSignal } from '../nodes/NodeTypes';
 import type { Edge, Node, Port, SignalType, Viewport, XY } from '../types/graph';
-import { GRID, NODE_WIDTH, nodeHeight, snapXY } from '../components/canvas/geometry';
+import { cableCorridorGap, GRID, NODE_WIDTH, nodeHeight, snapXY } from '../components/canvas/geometry';
 
 type Space = { name: string; color: string };
 type Snapshot = Pick<CanvasState, 'nodes' | 'edges' | 'spaces'>;
@@ -53,6 +53,7 @@ const expandLabels = (labels: string[]) => labels.flatMap(label => {
 const port = (label: string, side: 'input' | 'output'): Port => ({ id: nanoid(8), label: label.trim(), side, signalType: templateSignal(label) });
 const customPort = (x: string | Pick<Port, 'label' | 'signalType'>, side: 'input' | 'output'): Port => typeof x === 'string' ? port(x, side) : { id: nanoid(8), label: x.label.trim(), side, signalType: x.signalType };
 export const NODE_GAP = GRID * 2;
+const AUTO_ALIGN_GAP = GRID * 3;
 const overlaps = (a: Node, b: Node, gap = NODE_GAP) => a.position.x < b.position.x + NODE_WIDTH + gap && a.position.x + NODE_WIDTH + gap > b.position.x && a.position.y < b.position.y + nodeHeight(b) + gap && a.position.y + nodeHeight(a) + gap > b.position.y;
 const firstFree = (node: Node, nodes: Node[]) => {
   for (let i = 0, n = node; i < 200; i++, n = { ...node, position: snapXY({ x: node.position.x + i * NODE_GAP, y: node.position.y + i * NODE_GAP }) }) if (!nodes.some(x => overlaps(n, x))) return n;
@@ -75,6 +76,19 @@ const aligned = (nodes: Node[], edges: Edge[]) => Object.values(nodes.reduce<Rec
 
   const x0 = Math.min(...group.map(n => n.position.x)), y0 = Math.min(...group.map(n => n.position.y));
   const cols = Object.entries(group.reduce<Record<number, Node[]>>((a, n) => ((a[rank[n.id]] ??= []).push(n), a), {})).sort(([a], [b]) => Number(a) - Number(b)).map(([r, ns]) => ({ r: Number(r), ns: ns.sort((a, b) => a.position.y - b.position.y) }));
+  const channels = new Map<number, number>();
+  for (const edge of groupEdges) {
+    const from = rank[edge.sourceNodeId], to = rank[edge.targetNodeId];
+    for (let boundary = Math.min(from, to); boundary < Math.max(from, to); boundary++) channels.set(boundary, (channels.get(boundary) ?? 0) + 1);
+  }
+  const columnX = new Map<number, number>();
+  let x = x0;
+  cols.forEach((column, i) => {
+    columnX.set(column.r, x);
+    const next = cols[i + 1];
+    if (!next) return;
+    for (let boundary = column.r; boundary < next.r; boundary++) x += NODE_WIDTH + cableCorridorGap(channels.get(boundary) ?? 0);
+  });
   const order = new Map(group.map(n => [n.id, n.position.y]));
   const neighbors = (n: Node) => groupEdges.flatMap(e => [e.sourceNodeId === n.id ? e.targetNodeId : undefined, e.targetNodeId === n.id ? e.sourceNodeId : undefined]).filter(Boolean) as string[];
 
@@ -93,9 +107,9 @@ const aligned = (nodes: Node[], edges: Edge[]) => Object.values(nodes.reduce<Rec
   return cols.flatMap(col => col.ns.reduce<{ y: number; nodes: Node[] }>((a, n) => {
     const near = neighbors(n).map(id => placed.get(id)).filter(Boolean) as Node[];
     const wanted = near.length ? Math.min(...near.map(x => x.position.y)) : a.y;
-    const moved = { ...n, position: snapXY({ x: x0 + col.r * (NODE_WIDTH + NODE_GAP), y: Math.max(a.y, wanted) }) };
+    const moved = { ...n, position: snapXY({ x: columnX.get(col.r)!, y: Math.max(a.y, wanted) }) };
     placed.set(n.id, moved);
-    return { y: moved.position.y + nodeHeight(moved) + NODE_GAP, nodes: [...a.nodes, moved] };
+    return { y: moved.position.y + nodeHeight(moved) + AUTO_ALIGN_GAP, nodes: [...a.nodes, moved] };
   }, { y: y0, nodes: [] }).nodes);
 });
 
