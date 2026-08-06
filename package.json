@@ -7,15 +7,16 @@
   },
   "scripts": {
     "dev": "astro dev",
-    "test": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/geometry-check.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro"
   },
   "dependencies": {
-    "@astrojs/react": "^6.0.1",
+    "@astrojs/react": "^6.0.2",
     "@tailwindcss/vite": "^4.3.1",
-    "astro": "^7.0.7",
+    "astro": "^7.1.6",
     "nanoid": "^5.1.15",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
@@ -23,6 +24,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
   }
 }

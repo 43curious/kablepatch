@@ -26,6 +26,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
   'Patch Bays': '#455A64',
   'Playback / Recording': '#1A237E',
   Monitoring: '#004D40',
+  Infrastructure: '#006064',
   Custom: '#334155',
 };
 
@@ -36,10 +37,12 @@ export type NodeTemplate = {
   icon: string;
   defaultInputs: string[];
   defaultOutputs: string[];
+  defaultBidirectional?: string[];
+  layout?: 'ethernet-switch';
 };
 
-const t = (id: string, label: string, category: string, icon: string, defaultInputs: string[], defaultOutputs: string[]): NodeTemplate =>
-  ({ id, label, category, icon, defaultInputs, defaultOutputs });
+const t = (id: string, label: string, category: string, icon: string, defaultInputs: string[], defaultOutputs: string[], defaultBidirectional: string[] = [], layout?: NodeTemplate['layout']): NodeTemplate =>
+  ({ id, label, category, icon, defaultInputs, defaultOutputs, defaultBidirectional, layout });
 
 export const NODE_TYPES: NodeTemplate[] = [
   t('yamaha-tf1', 'Yamaha TF1', 'Audio Consoles', '🎚️', ['CH 1-16 XLR', 'ST IN 1-4', 'DANTE IN 1-16'], ['MIX 1-16', 'MASTER L/R', 'DANTE OUT 1-16', 'MON OUT']),
@@ -57,6 +60,7 @@ export const NODE_TYPES: NodeTemplate[] = [
   t('videohub-40', 'Blackmagic Videohub 40x40', 'Video Routers', '🔀', ['SDI IN 1-40'], ['SDI OUT 1-40']),
   t('smarthub-20', 'BM SmartHub 20x20', 'Video Routers', '🔀', ['SDI IN 1-20'], ['SDI OUT 1-20']),
   t('generic-router', 'Generic Router NxN', 'Video Routers', '🔀', ['IN 1-8'], ['OUT 1-8']),
+  t('ethernet-switch', 'Ethernet Switch 24-port', 'Infrastructure', '🔗', [], [], ['ETH 1-24'], 'ethernet-switch'),
   t('generic-camera', 'Generic Camera', 'Broadcast Cameras', '📹', ['RETURN VIDEO', 'IFB AUDIO', 'TALLY'], ['SDI OUT', 'HDMI OUT', 'AUDIO OUT L/R']),
   t('box-camera', 'Box Camera', 'Broadcast Cameras', '📹', ['CONTROL', 'TALLY'], ['SDI OUT 1-2']),
   t('dolby-atmos-renderer', 'Dolby Atmos Renderer', 'Processors / DSP', '🧠', ['DANTE IN 1-128', 'MADI IN 1-64'], ['BED L/R/C/LFE/Ls/Rs', 'OBJ 1-118', 'BINAURAL']),

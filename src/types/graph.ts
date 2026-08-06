@@ -8,8 +8,12 @@ export interface Port {
   id: string;
   label: string;
   signalType: SignalType;
-  side: 'input' | 'output';
+  side: 'input' | 'output' | 'bidirectional';
+  /** Physical face for bidirectional connectors; input/output sides are implicit. */
+  position?: 'left' | 'right' | 'top' | 'bottom';
   aliases?: string[];
+  /** Keeps separately added port groups distinct even when their labels match. */
+  groupId?: string;
 }
 
 export interface Node {
@@ -17,8 +21,12 @@ export interface Node {
   label: string;
   category: string;
   headerColor: string;
+  /** Library template or preset this node came from, for catalog updates. */
+  catalogId?: string;
   position: XY;
   ports: Port[];
+  /** Optional physical layout variant. */
+  layout?: 'ethernet-switch';
   space?: string;
   notes?: string;
 }
@@ -29,5 +37,7 @@ export interface Edge {
   sourcePortId: string;
   targetNodeId: string;
   targetPortId: string;
+  /** Absolute world-space bends retained when connected devices move. */
+  waypoints?: XY[];
   label?: string;
 }
