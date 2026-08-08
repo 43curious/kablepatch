@@ -55,6 +55,7 @@ export default function FloatingToolbar({ svgRef, onOpenCanvas, onAutoAlign }: {
   const [exportPassword, setExportPassword] = useState('');
   const [open, setOpen] = useState(true);
   const [tab, setTab] = useState<'presets' | 'add' | 'project' | 'export'>('add');
+  const [presetTab, setPresetTab] = useState<'inspector' | 'create'>('create');
   const [customLabel, setCustomLabel] = useState('Custom Device');
   const [customCategory, setCustomCategory] = useState('Custom');
   const [customManualUrl, setCustomManualUrl] = useState('');
@@ -76,6 +77,7 @@ export default function FloatingToolbar({ svgRef, onOpenCanvas, onAutoAlign }: {
   const [vlanColor, setVlanColor] = useState('#22c55e');
   const [notice, setNotice] = useState('');
   const selectedNodeId = useCanvasStore(state => state.selectedNodeId);
+  const selectedNodeIds = useCanvasStore(state => state.selectedNodeIds);
   const selected = useCanvasStore(useShallow(state => {
     const node = state.nodes.find(item => item.id === selectedNodeId);
     return node ? { id: node.id, label: node.label, category: node.category, catalogId: node.catalogId, ports: node.ports } : null;
@@ -123,6 +125,9 @@ export default function FloatingToolbar({ svgRef, onOpenCanvas, onAutoAlign }: {
   useEffect(() => { if (categoriesLoaded) localStorage.setItem(COMPONENTS_KEY, JSON.stringify(saved)); }, [saved, categoriesLoaded]);
   useEffect(() => { if (categoriesLoaded) localStorage.setItem(HIDDEN_KEY, JSON.stringify(hidden)); }, [hidden, categoriesLoaded]);
   useEffect(() => { if (categoriesLoaded) localStorage.setItem(CATEGORY_KEY, JSON.stringify(categoryCatalog)); }, [categoryCatalog, categoriesLoaded]);
+  useEffect(() => {
+    if (selectedNodeId && selectedNodeIds.length === 1) { setOpen(true); setTab('presets'); setPresetTab('inspector'); }
+  }, [selectedNodeId, selectedNodeIds]);
 
   const center = () => {
     const r = svgRef.current?.getBoundingClientRect(), viewport = useCanvasStore.getState().viewport;
@@ -156,7 +161,7 @@ export default function FloatingToolbar({ svgRef, onOpenCanvas, onAutoAlign }: {
     setSaved(xs => [...xs.filter(x => x.label !== c.label || x.category !== c.category), c]);
   };
   const editSaved = (c: SavedComponent) => {
-    setTab('presets'); setSavedId(c.id); setTemplateId(c.templateId ?? ''); setCustomLabel(c.label); setCustomCategory(c.category || 'Custom'); setCustomManualUrl(c.manualUrl ?? ''); setInputGroups(c.inputGroups); setOutputGroups(c.outputGroups); setBidirectionalGroups(c.bidirectionalGroups ?? []);
+    setTab('presets'); setPresetTab('create'); setSavedId(c.id); setTemplateId(c.templateId ?? ''); setCustomLabel(c.label); setCustomCategory(c.category || 'Custom'); setCustomManualUrl(c.manualUrl ?? ''); setInputGroups(c.inputGroups); setOutputGroups(c.outputGroups); setBidirectionalGroups(c.bidirectionalGroups ?? []);
   };
   const removeSaved = (c: SavedComponent) => {
     if (!confirm(`Remove ${c.label} from your catalog?`)) return;
@@ -208,7 +213,7 @@ export default function FloatingToolbar({ svgRef, onOpenCanvas, onAutoAlign }: {
     return { ...x, assignments, categoryOrder };
   });
   const editTemplate = (n: typeof NODE_TYPES[number]) => {
-    setTab('presets'); setSavedId(''); setTemplateId(n.id); setCustomLabel(n.label); setCustomCategory(n.category); setCustomManualUrl(''); setInputGroups(templateGroups(n.defaultInputs)); setOutputGroups(templateGroups(n.defaultOutputs)); setBidirectionalGroups((n.defaultBidirectional ?? []).map(type => ({ ...templateGroups([type])[0], position: n.layout === 'ethernet-switch' ? 'top' : 'left' })));
+    setTab('presets'); setPresetTab('create'); setSavedId(''); setTemplateId(n.id); setCustomLabel(n.label); setCustomCategory(n.category); setCustomManualUrl(''); setInputGroups(templateGroups(n.defaultInputs)); setOutputGroups(templateGroups(n.defaultOutputs)); setBidirectionalGroups((n.defaultBidirectional ?? []).map(type => ({ ...templateGroups([type])[0], position: n.layout === 'ethernet-switch' ? 'top' : 'left' })));
   };
   const download = (name: string, type: string, text: string) => {
     const a = document.createElement('a');
@@ -271,7 +276,7 @@ export default function FloatingToolbar({ svgRef, onOpenCanvas, onAutoAlign }: {
 
   return <div className={`side-stack ${open ? '' : 'sidebar-collapsed'}`}><aside className={`toolbar ${selected ? 'expanded' : ''} ${open ? '' : 'collapsed'}`}>
     <div className="sidebar-topbar">
-      {open && <nav className="tabs" aria-label="Sidebar sections"><button className={tab === 'add' ? 'active' : ''} aria-current={tab === 'add' ? 'page' : undefined} onClick={() => setTab('add')}>Add</button><button className={tab === 'presets' ? 'active' : ''} aria-current={tab === 'presets' ? 'page' : undefined} onClick={() => setTab('presets')}>Presets</button><button className={tab === 'project' ? 'active' : ''} aria-current={tab === 'project' ? 'page' : undefined} onClick={() => setTab('project')}>Project</button><button className={tab === 'export' ? 'active' : ''} aria-current={tab === 'export' ? 'page' : undefined} onClick={() => setTab('export')}>Export</button></nav>}
+      {open && <nav className="tabs" aria-label="Sidebar sections"><button className={tab === 'add' ? 'active' : ''} aria-current={tab === 'add' ? 'page' : undefined} onClick={() => setTab('add')}>Add</button><button className={tab === 'presets' ? 'active' : ''} aria-current={tab === 'presets' ? 'page' : undefined} onClick={() => { setTab('presets'); setPresetTab(selected ? 'inspector' : 'create'); }}>Presets</button><button className={tab === 'project' ? 'active' : ''} aria-current={tab === 'project' ? 'page' : undefined} onClick={() => setTab('project')}>Project</button><button className={tab === 'export' ? 'active' : ''} aria-current={tab === 'export' ? 'page' : undefined} onClick={() => setTab('export')}>Export</button></nav>}
       <button className="sidebar-toggle" aria-label={open ? 'Hide sidebar' : 'Show sidebar'} aria-expanded={open} title={open ? 'Hide sidebar' : 'Show sidebar'} onClick={() => setOpen(!open)}><svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M15 4v16" /><path d={open ? 'm8 9 3 3-3 3' : 'm11 9-3 3 3 3'} /></svg></button>
     </div>
     {open && <>
@@ -279,9 +284,11 @@ export default function FloatingToolbar({ svgRef, onOpenCanvas, onAutoAlign }: {
       {tab === 'project' && <div className="tab-panel project-panel">
         <section><h3>Diagram</h3><label>Port label layer<select value={s.portLayer} onChange={e => s.setPortLayer(Number(e.target.value))}><option value={0}>Base names</option>{Array.from({ length: aliasLayers }, (_, i) => <option key={i + 1} value={i + 1}>Alias layer {i + 1}</option>)}</select></label><div className="toolbar-actions"><button className="primary" onClick={() => { const name = prompt('Space name'); if (name) s.addSpace(name); }}>+ Space</button><button onClick={onAutoAlign}>Auto align</button></div>{s.spaces.length > 0 && <div className="space-list">{s.spaces.map(x => <span key={x.name}><input aria-label={`${x.name} color`} type="color" value={x.color} onChange={e => s.updateSpace(x.name, { color: e.target.value })} />{x.name}<button aria-label={`Delete ${x.name}`} onClick={() => confirm(`Delete ${x.name}?`) && s.deleteSpace(x.name)}>×</button></span>)}</div>}<p className="shortcut-hint">Undo: ⌘/Ctrl Z · Redo: ⇧⌘/Ctrl Z</p></section>
         <section className="vlan-project"><h3>VLANs</h3><p>Create network groups, assign them to components with Ethernet ports, then select a VLAN to highlight its members on the canvas.</p><form className="vlan-add" onSubmit={event => { event.preventDefault(); addProjectVlan(); }}><input aria-label="VLAN ID" title="VLAN ID" placeholder="ID" type="number" min="1" max="4094" value={vlanTag} onChange={event => setVlanTag(event.target.value)} /><input aria-label="VLAN name" placeholder="VLAN name" value={vlanName} onChange={event => setVlanName(event.target.value)} /><input aria-label="VLAN color" title="VLAN color" type="color" value={vlanColor} onChange={event => setVlanColor(event.target.value)} /><button className="primary" type="submit">Add</button></form>{s.vlans.length ? <div className="vlan-list">{[...s.vlans].sort((a, b) => a.tag - b.tag).map(vlan => { const count = s.nodes.filter(node => node.vlanIds?.includes(vlan.id)).length, active = s.selectedVlanId === vlan.id; return <div className={`vlan-row ${active ? 'active' : ''}`} key={vlan.id}><button className="vlan-select" aria-pressed={active} onClick={() => s.selectVlan(active ? null : vlan.id)}><span className="vlan-swatch" style={{ background: vlan.color }} /><span><b>VLAN {vlan.tag}</b><small>{vlan.name} · {count} component{count === 1 ? '' : 's'}</small></span></button><input aria-label={`VLAN ${vlan.tag} color`} type="color" value={vlan.color} onChange={event => s.updateVlan(vlan.id, { color: event.target.value })} /><button aria-label={`Edit VLAN ${vlan.tag}`} title="Edit VLAN" onClick={() => editProjectVlan(vlan.id)}>Edit</button><button className="remove" aria-label={`Delete VLAN ${vlan.tag}`} title="Delete VLAN" onClick={() => confirm(`Delete VLAN ${vlan.tag}? Components will be unassigned.`) && s.deleteVlan(vlan.id)}>×</button></div>; })}</div> : <p className="empty-state">No VLANs yet.</p>}{s.selectedVlanId && <div className="vlan-members"><b>Assign Ethernet components</b>{s.nodes.filter(hasEthernetPort).sort((a, b) => a.label.localeCompare(b.label)).map(node => <label key={node.id}><input type="checkbox" checked={node.vlanIds?.includes(s.selectedVlanId!) ?? false} onChange={event => s.setNodeVlanAssignment(node.id, s.selectedVlanId!, event.target.checked)} />{node.label}</label>)}{!s.nodes.some(hasEthernetPort) && <p className="empty-state">Add a switch or component with an Ethernet port to assign it.</p>}</div>}</section>
-        <section><h3>{selected ? 'Selected component' : 'Component properties'}</h3>{selected ? <NodeInspector categories={categoryOptions} /> : <p className="empty-state">Select a component on the canvas to edit its name, ports, space, VLANs, and notes.</p>}</section>
       </div>}
-      {tab === 'presets' && <div className="tab-panel custom-object">
+      {tab === 'presets' && <div className="tab-panel presets-panel">
+        <nav className="preset-subtabs" aria-label="Preset tools"><button className={presetTab === 'inspector' ? 'active' : ''} aria-current={presetTab === 'inspector' ? 'page' : undefined} onClick={() => setPresetTab('inspector')}>Inspector</button><button className={presetTab === 'create' ? 'active' : ''} aria-current={presetTab === 'create' ? 'page' : undefined} onClick={() => setPresetTab('create')}>Create</button></nav>
+        {presetTab === 'inspector' && <div className="preset-inspector">{selected ? <NodeInspector categories={categoryOptions} /> : <p className="empty-state">Select a component on the canvas to inspect its properties, ports, space, VLANs, and notes.</p>}</div>}
+        {presetTab === 'create' && <div className="custom-object">
           <label>Name<input placeholder="Object name" value={customLabel} onChange={e => setCustomLabel(e.target.value)} /></label>
           <label>Library category<select value={customCategory} onChange={e => setCustomCategory(e.target.value)}>{categoryOptions.map(category => <option key={category}>{category}</option>)}</select></label>
           <label>Technical specs / manual URL<input type="url" placeholder="https://manufacturer.com/manual" value={customManualUrl} onChange={e => setCustomManualUrl(e.target.value)} /></label>
@@ -295,6 +302,7 @@ export default function FloatingToolbar({ svgRef, onOpenCanvas, onAutoAlign }: {
           <button onClick={() => setBidirectionalGroups([...bidirectionalGroups, { type: 'ETHERNET', amount: 1, signalType: 'ethernet', position: 'left' }])}>+ bidirectional group</button>
           <div className="toolbar-actions form-actions"><button className="primary" onClick={saveComponent}>{savedId || templateId ? 'Save changes' : 'Save to library'}</button><button onClick={addCurrent}>Add to canvas</button><button onClick={resetForm}>New</button></div>
         </div>}
+      </div>}
         {tab === 'export' && <div className="tab-panel export-panel">
           <section><h3>Diagram exports</h3><p>Export the complete diagram as a scalable graphic or its connection schedule as a spreadsheet-ready file.</p><div className="toolbar-actions"><button className="primary" onClick={exportSvg}>Download SVG</button><button onClick={exportCsv}>Download CSV</button></div></section>
           <section><h3>Open or import</h3><p>Open replaces the canvas. Import merges an editable file and renames duplicate spaces with -1, -2…</p><div className="toolbar-actions"><button className="primary" onClick={() => { fileMode.current = 'open'; fileInput.current?.click(); }}>Open file</button><button onClick={() => { fileMode.current = 'import'; fileInput.current?.click(); }}>Import into canvas</button></div><input ref={fileInput} type="file" accept="application/json,.json" hidden onChange={e => { void openFile(e.currentTarget.files?.[0]); e.currentTarget.value = ''; }} /></section>
@@ -303,7 +311,7 @@ export default function FloatingToolbar({ svgRef, onOpenCanvas, onAutoAlign }: {
         </div>}
         {tab === 'add' && <div className="tab-panel catalog">
           <input aria-label="Search catalog" placeholder="Search devices and presets…" value={q} onChange={e => setQ(e.target.value)} />
-          <div className="catalog-tools"><span>{saved.length} saved preset{saved.length === 1 ? '' : 's'}</span><div><button className="primary" onClick={() => { resetForm(); setTab('presets'); }}>+ New preset</button><button onClick={manageCategories ? saveCategories : openCategoryManager}>{manageCategories ? 'Save categories' : 'Manage categories'}</button>{hidden.length > 0 && <button onClick={() => setHidden([])}>Restore catalog</button>}</div></div>
+          <div className="catalog-tools"><span>{saved.length} saved preset{saved.length === 1 ? '' : 's'}</span><div><button className="primary" onClick={() => { resetForm(); setTab('presets'); setPresetTab('create'); }}>+ New preset</button><button onClick={manageCategories ? saveCategories : openCategoryManager}>{manageCategories ? 'Save categories' : 'Manage categories'}</button>{hidden.length > 0 && <button onClick={() => setHidden([])}>Restore catalog</button>}</div></div>
           {manageCategories && <section className="category-manager"><header><div><h3>Categories</h3><p>Drag sections or subcategories into their new order, then save.</p></div><button onClick={() => setManageCategories(false)}>Cancel</button></header><div className="category-add"><input aria-label="New section" placeholder="New section" value={newSection} onChange={e => setNewSection(e.target.value)} /><button onClick={addSection}>+ Section</button></div><div className="category-add"><input aria-label="New subcategory" placeholder="New subcategory" value={newCategory} onChange={e => setNewCategory(e.target.value)} /><button onClick={addCategory}>+ Subcategory</button></div><div className="category-tree">{categoryDraft.sections.map(section => <div className="category-drag-section" key={section} draggable onDragStart={e => e.dataTransfer.setData('text/plain', `section:${section}`)} onDragOver={e => e.preventDefault()} onDrop={e => { const [type, name] = e.dataTransfer.getData('text/plain').split(':'); if (type === 'section') moveSection(name, section); if (type === 'category') moveCategory(name, section); }}><div className="category-drag-title"><span>↕ {section}</span><button className="category-delete" aria-label={`Delete ${section}`} disabled={section === 'Other'} onClick={e => { e.stopPropagation(); deleteSection(section); }}>🗑</button></div><div className="category-drop-zone">{draftCategories.filter(category => (categoryDraft.assignments[category] ?? 'Other') === section).map(category => <div className="category-drag-item" key={category} draggable onDragStart={e => { e.stopPropagation(); e.dataTransfer.setData('text/plain', `category:${category}`); }} onDragOver={e => e.preventDefault()} onDrop={e => { e.stopPropagation(); const [type, name] = e.dataTransfer.getData('text/plain').split(':'); if (type === 'category') moveCategory(name, section, category); }}><span>↕ {category}</span><button className="category-delete" aria-label={`Delete ${category}`} onClick={() => deleteCategory(category)}>🗑</button></div>)}</div></div>)}</div></section>}
           <div className="node-list">
             {catalogSections.map(([section, categories]) => <details className="category-section" key={section} open><summary>{section}</summary><div className="category-list">

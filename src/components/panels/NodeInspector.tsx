@@ -36,6 +36,7 @@ export default function NodeInspector({ categories }: { categories: string[] }) 
   const beginTransaction = useCanvasStore(state => state.beginTransaction);
   const commitTransaction = useCanvasStore(state => state.commitTransaction);
   const portLayer = useCanvasStore(state => state.portLayer);
+  const setPortLayer = useCanvasStore(state => state.setPortLayer);
   const spaces = useCanvasStore(state => state.spaces);
   const vlans = useCanvasStore(state => state.vlans);
   const setNodeVlanAssignment = useCanvasStore(state => state.setNodeVlanAssignment);
@@ -44,6 +45,7 @@ export default function NodeInspector({ categories }: { categories: string[] }) 
   const inputGroups = portGroups(node.ports.filter(p => p.side === 'input'));
   const outputGroups = portGroups(node.ports.filter(p => p.side === 'output'));
   const bidirectionalGroups = portGroups(node.ports.filter(p => p.side === 'bidirectional'));
+  const nameLayers = Math.max(1, portLayer, ...node.ports.map(port => (port.aliases?.length ?? 0) + 1));
   const applyGroups = (side: Port['side'], groups: PortGroup[]) => updateNode(node.id, { ports: [...node.ports.filter(p => p.side !== side), ...buildPorts(groups)] });
   const moveGroup = (side: Port['side'], groups: PortGroup[], from: number, to: number) => {
     const next = [...groups], [moved] = next.splice(from, 1);
@@ -65,6 +67,7 @@ export default function NodeInspector({ categories }: { categories: string[] }) 
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement) commitTransaction();
   }}>
     <label>Name<input value={node.label} onChange={e => updateNode(node.id, { label: e.target.value })} /></label>
+    <label>Port name overlay<select value={portLayer} onChange={event => setPortLayer(Number(event.target.value))}><option value={0}>Base port names</option>{Array.from({ length: nameLayers }, (_, index) => <option key={index + 1} value={index + 1}>Name layer {index + 1}</option>)}</select></label>
     <label>Category<select value={node.category} onChange={e => updateNode(node.id, { category: e.target.value, headerColor: CATEGORY_COLORS[e.target.value] ?? CATEGORY_COLORS.Custom })}>{categories.map(category => <option key={category}>{category}</option>)}</select></label>
     <label>Color<input type="color" value={node.headerColor} onChange={e => updateNode(node.id, { headerColor: e.target.value })} /></label>
     <label>Space<select value={node.space ?? ''} onChange={e => updateNode(node.id, { space: e.target.value })}><option value="">No space</option>{spaces.map(x => <option key={x.name} value={x.name}>{x.name}</option>)}</select></label>
@@ -94,7 +97,7 @@ export default function NodeInspector({ categories }: { categories: string[] }) 
       <button onClick={() => applyGroups('bidirectional', bidirectionalGroups.filter((_, n) => n !== i))}>×</button>
     </div>)}
     <div className="toolbar-actions"><button onClick={() => applyGroups('output', [...outputGroups, { side: 'output', type: 'NEW OUTPUT', amount: 1, signalType: 'analog_audio', ids: [], aliases: [], groupId: crypto.randomUUID() }])}>+ output</button><button onClick={() => applyGroups('bidirectional', [...bidirectionalGroups, { side: 'bidirectional', position: 'left', type: 'ETHERNET', amount: 1, signalType: 'ethernet', ids: [], aliases: [], groupId: crypto.randomUUID() }])}>+ bidirectional</button><button onClick={savePreset}>Save as preset</button></div>
-    {portLayer > 0 && <><h3>Alias layer {portLayer}</h3>{node.ports.map(p => <label className="alias-edit" key={p.id}>{p.label}<input placeholder={p.label} value={p.aliases?.[portLayer - 1] ?? ''} onChange={e => patchAlias(p.id, e.target.value)} /></label>)}</>}
+    {portLayer > 0 && <div className="name-layer-editor"><h3>Name layer {portLayer}</h3><p>Set this component’s port names for the selected overlay.</p>{node.ports.map(p => <label className="alias-edit" key={p.id}>{p.label}<input placeholder={p.label} value={p.aliases?.[portLayer - 1] ?? ''} onChange={e => patchAlias(p.id, e.target.value)} /></label>)}</div>}
     <label>Notes<textarea value={node.notes ?? ''} onChange={e => updateNode(node.id, { notes: e.target.value })} /></label>
     <button className="danger" onClick={() => confirm('Delete this node?') && deleteNode(node.id)}>Delete node</button>
   </section>;

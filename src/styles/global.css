@@ -68,6 +68,12 @@ button.primary:hover { background: #1d4ed8; }
 .space-list button { min-height: 22px; padding: 0 4px; color: #b91c1c; background: transparent; }
 
 .custom-object { margin-bottom: 12px; padding: 13px; border: 1px solid #dbe4ef; border-radius: 10px; background: #f8fafc; }
+.preset-subtabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 10px; padding: 3px; border-radius: 9px; background: #e8eef7; }
+.preset-subtabs button { min-height: 32px; border: 0; background: transparent; font-size: 12px; font-weight: 700; }
+.preset-subtabs .active { color: #1d4ed8; background: white; box-shadow: 0 1px 3px rgba(15,23,42,.12); }
+.preset-inspector { padding: 13px; border: 1px solid #dbe4ef; border-radius: 10px; background: #f8fafc; }
+.preset-inspector .inspector { margin-top: 0; padding-top: 0; border-top: 0; }
+.preset-inspector > .empty-state { margin: 2px 0; text-align: left; line-height: 1.45; }
 .project-panel > section, .export-panel section { margin: 0 0 10px; padding: 13px; border: 1px solid #dbe4ef; border-radius: 10px; background: #f8fafc; }
 .project-panel > section > h3, .export-panel h3 { margin: 0; color: #0f172a; font-size: 14px; }
 .project-panel .inspector { margin-top: 8px; padding-top: 0; border-top: 0; }
@@ -160,6 +166,9 @@ button.primary:hover { background: #1d4ed8; }
 .inspector { margin-top: 14px; padding-top: 14px; border-top: 1px solid #e2e8f0; }
 .inspector h3 { margin: 16px 0 8px; color: #0f172a; font-size: 14px; }
 .inspector > b { margin: 10px 0 5px; }
+.name-layer-editor { margin: 14px 0; padding: 10px; border: 1px solid #dbe4ef; border-radius: 8px; background: white; }
+.name-layer-editor h3 { margin: 0 0 3px; }
+.name-layer-editor p { margin: 0 0 9px; color: #64748b; font-size: 11px; line-height: 1.4; }
 .alias-edit { margin-top: 8px; }
 .danger { width: 100%; margin-top: 12px; color: #b91c1c; border-color: #fecaca; background: #fff1f2; }
 .danger:hover { background: #ffe4e6; }
