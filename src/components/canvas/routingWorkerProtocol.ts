@@ -15,8 +15,19 @@ export type RoutingWorkerRequest = {
   options: WorkerRouteOptions;
 };
 
+export type RoutingWorkerTelemetry = {
+  edgeCount: number;
+  nodeCount: number;
+  sceneCacheHit: boolean;
+  sceneKeyMs: number;
+  sceneBuildMs: number;
+  routingMs: number;
+  workerTotalMs: number;
+};
+
 export type RoutingWorkerResponse = {
   requestId: number;
   routes?: RoutedEdge[];
   error?: string;
+  telemetry: RoutingWorkerTelemetry;
 };

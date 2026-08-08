@@ -149,6 +149,77 @@ describe('canvas selection', () => {
   });
 });
 
+describe('VLAN management', () => {
+  it('creates selectable VLANs and assigns only Ethernet components', () => {
+    const previous = useCanvasStore.getState();
+    const networked: Node = { ...node('networked', { x: 0, y: 0 }, 'bidirectional'), ports: [{ id: 'eth', label: 'ETH', side: 'bidirectional', signalType: 'ethernet' }] };
+    const analog = node('analog', { x: 240, y: 0 }, 'input');
+    try {
+      useCanvasStore.setState({ nodes: [networked, analog], edges: [], spaces: [], vlans: [], selectedNodeId: networked.id, selectedNodeIds: [networked.id], selectedEdgeId: null, selectedVlanId: null, past: [], future: [], transaction: null, geometryRevision: 50 });
+      const store = useCanvasStore.getState();
+      store.addVlan(10, 'Control', '#22c55e');
+      store.addVlan(20, 'Media', '#8b5cf6');
+      store.addVlan(10, 'Duplicate');
+      const [control, media] = useCanvasStore.getState().vlans;
+      expect(useCanvasStore.getState().vlans).toHaveLength(2);
+      expect(useCanvasStore.getState().geometryRevision).toBe(50);
+
+      store.setNodeVlanAssignment(networked.id, control.id, true);
+      store.setNodeVlanAssignment(networked.id, media.id, true);
+      store.setNodeVlanAssignment(analog.id, control.id, true);
+      expect(useCanvasStore.getState().nodes.find(item => item.id === networked.id)?.vlanIds).toEqual([control.id, media.id]);
+      expect(useCanvasStore.getState().nodes.find(item => item.id === analog.id)?.vlanIds).toBeUndefined();
+      expect(useCanvasStore.getState().geometryRevision).toBe(50);
+
+      store.selectVlan(control.id);
+      expect(useCanvasStore.getState()).toMatchObject({ selectedVlanId: control.id, selectedNodeId: null, selectedNodeIds: [], selectedEdgeId: null });
+      store.selectNode(networked.id);
+      expect(useCanvasStore.getState().selectedVlanId).toBeNull();
+
+      store.deleteVlan(control.id);
+      expect(useCanvasStore.getState().nodes.find(item => item.id === networked.id)?.vlanIds).toEqual([media.id]);
+      store.undo();
+      expect(useCanvasStore.getState().vlans.some(vlan => vlan.id === control.id)).toBe(true);
+      expect(useCanvasStore.getState().nodes.find(item => item.id === networked.id)?.vlanIds).toEqual([control.id, media.id]);
+    } finally {
+      useCanvasStore.setState(previous, true);
+    }
+  });
+
+  it('merges imported VLAN tags and remaps imported assignments', () => {
+    const previous = useCanvasStore.getState();
+    const imported: Node = { ...node('imported', { x: 0, y: 0 }, 'bidirectional'), ports: [{ id: 'eth', label: 'ETH', side: 'bidirectional', signalType: 'ethernet' }], vlanIds: ['incoming-control', 'incoming-media'] };
+    try {
+      useCanvasStore.setState({ nodes: [], edges: [], spaces: [], vlans: [{ id: 'existing-control', tag: 10, name: 'Existing control', color: '#22c55e' }], past: [], future: [], transaction: null });
+      useCanvasStore.getState().importCanvas({
+        nodes: [imported], edges: [], spaces: [], viewport: { x: 0, y: 0, zoom: 1 },
+        vlans: [{ id: 'incoming-control', tag: 10, name: 'Imported control', color: '#000000' }, { id: 'incoming-media', tag: 20, name: 'Media', color: '#8b5cf6' }],
+      });
+      const state = useCanvasStore.getState(), media = state.vlans.find(vlan => vlan.tag === 20)!;
+      expect(state.vlans).toHaveLength(2);
+      expect(state.vlans.find(vlan => vlan.tag === 10)?.id).toBe('existing-control');
+      expect(state.nodes[0].vlanIds).toEqual(['existing-control', media.id]);
+    } finally {
+      useCanvasStore.setState(previous, true);
+    }
+  });
+
+  it('clears VLAN assignments when the last Ethernet port is removed', () => {
+    const previous = useCanvasStore.getState();
+    const networked: Node = { ...node('networked', { x: 0, y: 0 }, 'bidirectional'), ports: [{ id: 'eth', label: 'ETH', side: 'bidirectional', signalType: 'ethernet' }], vlanIds: ['control'] };
+    try {
+      useCanvasStore.setState({ nodes: [networked], edges: [], vlans: [{ id: 'control', tag: 10, name: 'Control', color: '#22c55e' }], past: [], future: [], transaction: null, geometryRevision: 60 });
+      useCanvasStore.getState().updateNode(networked.id, { ports: [{ ...networked.ports[0], signalType: 'analog_audio' }] });
+      expect(useCanvasStore.getState().nodes[0].vlanIds).toBeUndefined();
+      expect(useCanvasStore.getState().geometryRevision).toBe(61);
+      useCanvasStore.getState().undo();
+      expect(useCanvasStore.getState().nodes[0].vlanIds).toEqual(['control']);
+    } finally {
+      useCanvasStore.setState(previous, true);
+    }
+  });
+});
+
 describe('cable-first auto alignment', () => {
   it('keeps allocated spaces contiguous without top-aligning their components', () => {
     const isolated = { ...node('isolated', { x: 0, y: 0 }, 'output'), space: 'Studio' };
@@ -180,7 +251,7 @@ describe('cable-first auto alignment', () => {
 
       expect(switchNode.layout).toBe('ethernet-switch');
       expect(switchNode.ports).toHaveLength(24);
-      expect(switchNode.ports.every(item => item.side === 'bidirectional' && item.position === 'top')).toBe(true);
+      expect(switchNode.ports.every(item => item.side === 'bidirectional' && item.position === 'top' && item.signalType === 'ethernet')).toBe(true);
       expect(switchNode.ports.every(item => portDirection(switchNode, item) === 'north')).toBe(true);
       expect(switchNameStripeY(switchNode)).toBe(nodeHeight(switchNode) - 40);
     } finally {

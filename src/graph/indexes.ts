@@ -6,6 +6,7 @@ export type GraphIndex = {
   nodeById: Map<string, Node>;
   portByNodeId: Map<string, Map<string, Port>>;
   nodesBySpace: Map<string, Node[]>;
+  nodesByVlanId: Map<string, Node[]>;
 };
 
 export type ResolvedEdge = {
@@ -20,6 +21,7 @@ export const createGraphIndex = (nodes: Node[]): GraphIndex => {
   const nodeById = new Map<string, Node>();
   const portByNodeId = new Map<string, Map<string, Port>>();
   const nodesBySpace = new Map<string, Node[]>();
+  const nodesByVlanId = new Map<string, Node[]>();
   for (const node of nodes) {
     nodeById.set(node.id, node);
     portByNodeId.set(node.id, new Map(node.ports.map(port => [port.id, port])));
@@ -27,8 +29,13 @@ export const createGraphIndex = (nodes: Node[]): GraphIndex => {
     const group = nodesBySpace.get(space) ?? [];
     group.push(node);
     nodesBySpace.set(space, group);
+    for (const vlanId of node.vlanIds ?? []) {
+      const members = nodesByVlanId.get(vlanId) ?? [];
+      members.push(node);
+      nodesByVlanId.set(vlanId, members);
+    }
   }
-  return { nodeById, portByNodeId, nodesBySpace };
+  return { nodeById, portByNodeId, nodesBySpace, nodesByVlanId };
 };
 
 export const resolveEdge = (edge: Edge, index: GraphIndex): ResolvedEdge | null => {

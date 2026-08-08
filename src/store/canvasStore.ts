@@ -1,20 +1,23 @@
 import { create } from 'zustand';
 import { nanoid } from 'nanoid';
 import { CATEGORY_COLORS, NODE_TYPES, templateSignal } from '../nodes/NodeTypes';
-import type { Edge, Node, Port, SignalType, Viewport, XY } from '../types/graph';
+import { hasEthernetPort } from '../types/graph';
+import type { Edge, Node, Port, SignalType, Viewport, Vlan, XY } from '../types/graph';
 import { cableCorridorGap, GRID, nodeHeight, nodeWidth, shortestNodeY, snapXY } from '../components/canvas/geometry';
 import { canvasDataFromState, normalizeCanvasData, uniqueSpaceName } from './canvasDocument';
 
 type Space = { name: string; color: string };
-type Snapshot = Pick<CanvasState, 'nodes' | 'edges' | 'spaces'>;
+type Snapshot = Pick<CanvasState, 'nodes' | 'edges' | 'spaces' | 'vlans'>;
 
 interface CanvasState {
   nodes: Node[];
   edges: Edge[];
   viewport: Viewport;
   spaces: Space[];
+  vlans: Vlan[];
   selectedNodeId: string | null;
   selectedEdgeId: string | null;
+  selectedVlanId: string | null;
   selectedNodeIds: string[];
   draggingNodeId: string | null;
   portLayer: number;
@@ -39,6 +42,7 @@ interface CanvasState {
   setViewport: (viewport: Viewport) => void;
   selectNode: (id: string | null, additive?: boolean) => void;
   selectEdge: (id: string | null) => void;
+  selectVlan: (id: string | null) => void;
   selectAll: () => void;
   setDraggingNode: (id: string | null) => void;
   moveNodeTransient: (id: string, position: XY) => void;
@@ -50,6 +54,10 @@ interface CanvasState {
   updateSpace: (name: string, updates: Partial<Space>) => void;
   moveSpace: (name: string, dx: number, dy: number) => void;
   deleteSpace: (name: string) => void;
+  addVlan: (tag: number, name: string, color?: string) => void;
+  updateVlan: (id: string, updates: Partial<Pick<Vlan, 'tag' | 'name' | 'color'>>) => void;
+  deleteVlan: (id: string) => void;
+  setNodeVlanAssignment: (nodeId: string, vlanId: string, assigned: boolean) => void;
   autoAlign: () => void;
   undo: () => void;
   redo: () => void;
@@ -59,7 +67,7 @@ interface CanvasState {
 }
 
 const STORAGE_KEY = 'audiopatch-graph';
-const snap = (s: CanvasState): Snapshot => ({ nodes: s.nodes, edges: s.edges, spaces: s.spaces });
+const snap = (s: CanvasState): Snapshot => ({ nodes: s.nodes, edges: s.edges, spaces: s.spaces, vlans: s.vlans });
 const withHistory = (s: CanvasState) => s.transaction ? {} : ({ past: [...s.past.slice(-49), snap(s)], future: [] });
 const snapshotChanged = (a: Snapshot, b: Snapshot) => JSON.stringify(a) !== JSON.stringify(b);
 const samePosition = (a: XY, b: XY) => a.x === b.x && a.y === b.y;
@@ -231,7 +239,7 @@ const exampleGraph = (): Snapshot => {
     targetNodeId: b.id,
     targetPortId: b.ports.find(p => p.side === 'input' && p.label === inLabel)!.id,
   });
-  return { nodes: [tf1, atem, oria], edges: [edge(tf1, 'DANTE OUT 1', oria, 'DANTE IN 1'), edge(oria, 'LINE OUT 1', tf1, 'CH 1 XLR'), edge(atem, 'SDI PGM', tf1, 'ST IN 1')], spaces: [] };
+  return { nodes: [tf1, atem, oria], edges: [edge(tf1, 'DANTE OUT 1', oria, 'DANTE IN 1'), edge(oria, 'LINE OUT 1', tf1, 'CH 1 XLR'), edge(atem, 'SDI PGM', tf1, 'ST IN 1')], spaces: [], vlans: [] };
 };
 
 export const useCanvasStore = create<CanvasState>((set, get) => ({
@@ -240,6 +248,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   spaces: [{ name: 'TV set', color: '#c7d2fe' }, { name: 'Control room', color: '#bbf7d0' }],
   selectedNodeId: null,
   selectedEdgeId: null,
+  selectedVlanId: null,
   selectedNodeIds: [],
   draggingNodeId: null,
   portLayer: 0,
@@ -250,7 +259,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   addNode: (type, position) => set(s => ({ ...withHistory(s), nodes: [...s.nodes, firstFree(makeNode(type, position), s.nodes)], geometryRevision: s.geometryRevision + 1 })),
   addCustomNode: (label, inputs, outputs, position, category = 'Custom', catalogId, bidirectional = []) => set(s => {
     const layout = catalogId === 'ethernet-switch' ? 'ethernet-switch' as const : undefined;
-    const switchLabels = bidirectional.filter(Boolean).flatMap(x => typeof x === 'string' ? expandLabels([x]).map(label => ({ label, signalType: templateSignal(label), position: 'top' as const })) : [{ label: x.label, signalType: x.signalType, position: x.position === 'bottom' ? 'bottom' as const : 'top' as const }]);
+    const switchLabels = bidirectional.filter(Boolean).flatMap(x => typeof x === 'string' ? expandLabels([x]).map(label => ({ label, signalType: 'ethernet' as const, position: 'top' as const })) : [{ label: x.label, signalType: 'ethernet' as const, position: x.position === 'bottom' ? 'bottom' as const : 'top' as const }]);
     const switchPorts = layout === 'ethernet-switch' ? switchLabels.map(({ label, signalType, position }) => ({ id: nanoid(8), label, side: 'bidirectional' as const, position, signalType })) : [];
     const node = { id: nanoid(8), label: label || 'Custom Device', category, headerColor: CATEGORY_COLORS[category] ?? CATEGORY_COLORS.Custom, catalogId, layout, position: snapXY(position), ports: [...inputs.filter(Boolean).flatMap(x => typeof x === 'string' ? expandLabels([x]).map(y => port(y, 'input')) : [customPort(x, 'input')]), ...outputs.filter(Boolean).flatMap(x => typeof x === 'string' ? expandLabels([x]).map(y => port(y, 'output')) : [customPort(x, 'output')]), ...(switchPorts.length ? switchPorts : bidirectional.filter(Boolean).flatMap(x => typeof x === 'string' ? expandLabels([x]).map(y => port(y, 'bidirectional', 'left')) : [customPort(x, 'bidirectional')]))], notes: '' };
     return { ...withHistory(s), nodes: [...s.nodes, firstFree(node, s.nodes)], geometryRevision: s.geometryRevision + 1 };
@@ -270,13 +279,21 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       const sourceNodeId = nodeIds.get(edge.sourceNodeId), targetNodeId = nodeIds.get(edge.targetNodeId), sourcePortId = portIds.get(edge.sourcePortId), targetPortId = portIds.get(edge.targetPortId);
       return sourceNodeId && targetNodeId && sourcePortId && targetPortId ? [{ ...edge, id: nanoid(8), sourceNodeId, targetNodeId, sourcePortId, targetPortId }] : [];
     });
-    return { ...withHistory(s), nodes: occupied, edges: [...s.edges, ...edges], selectedNodeId: nodes[0].id, selectedNodeIds: nodes.map(node => node.id), selectedEdgeId: null, geometryRevision: s.geometryRevision + 1 };
+    return { ...withHistory(s), nodes: occupied, edges: [...s.edges, ...edges], selectedNodeId: nodes[0].id, selectedNodeIds: nodes.map(node => node.id), selectedEdgeId: null, selectedVlanId: null, geometryRevision: s.geometryRevision + 1 };
   }),
   importCanvas: data => set(s => {
     if (!data.nodes.length) return s;
     const usedNames = new Set(s.spaces.map(space => space.name)), spaceNames = new Map<string, string>();
     const importedNames = [...new Set([...data.spaces.map(space => space.name), ...data.nodes.map(node => node.space).filter(Boolean) as string[]])];
     importedNames.forEach(name => spaceNames.set(name, uniqueSpaceName(name, usedNames)));
+    const vlanIds = new Map<string, string>(), newVlans: Vlan[] = [];
+    const existingByTag = new Map(s.vlans.map(vlan => [vlan.tag, vlan]));
+    for (const vlan of data.vlans) {
+      const existing = existingByTag.get(vlan.tag);
+      const id = existing?.id ?? nanoid(8);
+      vlanIds.set(vlan.id, id);
+      if (!existing) { const imported = { ...vlan, id }; newVlans.push(imported); existingByTag.set(vlan.tag, imported); }
+    }
     const nodeIds = new Map<string, string>(), portIds = new Map<string, string>();
     const minX = Math.min(...data.nodes.map(node => node.position.x)), minY = Math.min(...data.nodes.map(node => node.position.y));
     const dx = s.nodes.length ? Math.max(...s.nodes.map(node => node.position.x + nodeWidth(node))) + AUTO_ALIGN_GAP - minX : 0;
@@ -284,7 +301,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const nodes = data.nodes.map(copy => {
       const ports = copy.ports.map(item => ({ ...item, id: nanoid(8) }));
       copy.ports.forEach((item, i) => portIds.set(item.id, ports[i].id));
-      const node = { ...copy, id: nanoid(8), space: copy.space ? spaceNames.get(copy.space) : copy.space, position: snapXY({ x: copy.position.x + dx, y: copy.position.y + dy }), ports };
+      const assignments = [...new Set((copy.vlanIds ?? []).flatMap(id => vlanIds.get(id) ?? []))];
+      const node = { ...copy, id: nanoid(8), space: copy.space ? spaceNames.get(copy.space) : copy.space, vlanIds: assignments.length ? assignments : undefined, position: snapXY({ x: copy.position.x + dx, y: copy.position.y + dy }), ports };
       nodeIds.set(copy.id, node.id);
       return node;
     });
@@ -294,7 +312,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     });
     const colors = new Map(data.spaces.map(space => [space.name, space.color]));
     const spaces = importedNames.map(name => ({ name: spaceNames.get(name)!, color: colors.get(name) ?? '#c7d2fe' }));
-    return { ...withHistory(s), nodes: [...s.nodes, ...nodes], edges: [...s.edges, ...edges], spaces: [...s.spaces, ...spaces], selectedNodeId: null, selectedEdgeId: null, selectedNodeIds: nodes.map(node => node.id), geometryRevision: s.geometryRevision + 1 };
+    return { ...withHistory(s), nodes: [...s.nodes, ...nodes], edges: [...s.edges, ...edges], spaces: [...s.spaces, ...spaces], vlans: [...s.vlans, ...newVlans], selectedNodeId: null, selectedEdgeId: null, selectedVlanId: null, selectedNodeIds: nodes.map(node => node.id), geometryRevision: s.geometryRevision + 1 };
   }),
   updateCatalogCategory: (catalogId, category, label) => set(s => {
     const templateLabel = NODE_TYPES.find(template => template.id === catalogId)?.label;
@@ -309,16 +327,19 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   updateNode: (id, updates) => set(s => {
     const current = s.nodes.find(node => node.id === id);
     if (!current) return s;
-    const nodes = s.nodes.map(node => node.id === id ? { ...node, ...updates, position: updates.position ? snapXY(updates.position) : node.position } : node);
-    const next = nodes.find(node => node.id === id)!;
+    const candidate = { ...current, ...updates, position: updates.position ? snapXY(updates.position) : current.position };
+    const knownVlans = new Set(s.vlans.map(vlan => vlan.id));
+    const assignments = hasEthernetPort(candidate) ? [...new Set((candidate.vlanIds ?? []).filter(vlanId => knownVlans.has(vlanId)))] : [];
+    const next = { ...candidate, vlanIds: assignments.length ? assignments : undefined };
+    const nodes = s.nodes.map(node => node.id === id ? next : node);
     if (JSON.stringify(current) === JSON.stringify(next)) return s;
     const geometryUpdate = !samePosition(current.position, next.position) || current.layout !== next.layout || current.ports !== next.ports;
     if (!updates.ports) return { ...withHistory(s), nodes, geometryRevision: s.geometryRevision + Number(geometryUpdate) };
-    const portIds = new Set(nodes.find(node => node.id === id)?.ports.map(item => item.id));
+    const portIds = new Set(next.ports.map(item => item.id));
     const edges = s.edges.filter(edge => (edge.sourceNodeId !== id || portIds.has(edge.sourcePortId)) && (edge.targetNodeId !== id || portIds.has(edge.targetPortId)));
     return { ...withHistory(s), nodes, edges, geometryRevision: s.geometryRevision + Number(geometryUpdate || edges.length !== s.edges.length) };
   }),
-  deleteNode: id => set(s => s.nodes.some(node => node.id === id) ? ({ ...withHistory(s), nodes: s.nodes.filter(n => n.id !== id), edges: s.edges.filter(e => e.sourceNodeId !== id && e.targetNodeId !== id), selectedNodeId: null, selectedNodeIds: [], geometryRevision: s.geometryRevision + 1 }) : s),
+  deleteNode: id => set(s => s.nodes.some(node => node.id === id) ? ({ ...withHistory(s), nodes: s.nodes.filter(n => n.id !== id), edges: s.edges.filter(e => e.sourceNodeId !== id && e.targetNodeId !== id), selectedNodeId: null, selectedNodeIds: [], selectedVlanId: null, geometryRevision: s.geometryRevision + 1 }) : s),
   addEdge: (firstNodeId, firstPortId, secondNodeId, secondPortId) => set(s => {
     if (firstNodeId === secondNodeId && firstPortId === secondPortId) return s;
     const first = s.nodes.find(node => node.id === firstNodeId)?.ports.find(item => item.id === firstPortId);
@@ -346,13 +367,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   deleteEdge: id => set(s => s.edges.some(edge => edge.id === id) ? ({ ...withHistory(s), edges: s.edges.filter(e => e.id !== id), selectedEdgeId: null, geometryRevision: s.geometryRevision + 1 }) : s),
   setViewport: viewport => set({ viewport }),
   selectNode: (id, additive = false) => set(s => {
-    if (!id) return { selectedNodeId: null, selectedEdgeId: null, selectedNodeIds: [] };
-    if (!additive) return { selectedNodeId: id, selectedEdgeId: null, selectedNodeIds: [id] };
+    if (!id) return { selectedNodeId: null, selectedEdgeId: null, selectedVlanId: null, selectedNodeIds: [] };
+    if (!additive) return { selectedNodeId: id, selectedEdgeId: null, selectedVlanId: null, selectedNodeIds: [id] };
     const selectedNodeIds = s.selectedNodeIds.includes(id) ? s.selectedNodeIds.filter(nodeId => nodeId !== id) : [...s.selectedNodeIds, id];
-    return { selectedNodeId: selectedNodeIds.length === 1 ? selectedNodeIds[0] : null, selectedEdgeId: null, selectedNodeIds };
+    return { selectedNodeId: selectedNodeIds.length === 1 ? selectedNodeIds[0] : null, selectedEdgeId: null, selectedVlanId: null, selectedNodeIds };
   }),
-  selectEdge: id => set({ selectedEdgeId: id, selectedNodeId: null, selectedNodeIds: [] }),
-  selectAll: () => set(s => ({ selectedNodeIds: s.nodes.map(n => n.id), selectedNodeId: null, selectedEdgeId: null })),
+  selectEdge: id => set({ selectedEdgeId: id, selectedNodeId: null, selectedVlanId: null, selectedNodeIds: [] }),
+  selectVlan: id => set(s => id && !s.vlans.some(vlan => vlan.id === id) ? s : { selectedVlanId: id, selectedNodeId: null, selectedEdgeId: null, selectedNodeIds: [] }),
+  selectAll: () => set(s => ({ selectedNodeIds: s.nodes.map(n => n.id), selectedNodeId: null, selectedEdgeId: null, selectedVlanId: null })),
   setDraggingNode: draggingNodeId => set({ draggingNodeId }),
   moveNodeTransient: (id, position) => set(s => {
     const snapped = snapXY(position), current = s.nodes.find(node => node.id === id);
@@ -366,7 +388,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const placed = firstFree(desired, s.nodes.filter(node => node.id !== id));
     const positionChanged = !samePosition(current.position, placed.position);
     const nodes = positionChanged ? s.nodes.map(node => node.id === id ? placed : node) : s.nodes;
-    const document = { nodes, edges: s.edges, spaces: s.spaces };
+    const document = { nodes, edges: s.edges, spaces: s.spaces, vlans: s.vlans };
     const committed = s.transaction && snapshotChanged(s.transaction, document);
     return {
       nodes, draggingNodeId: null, transaction: null,
@@ -399,20 +421,51 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     return changed ? { nodes, geometryRevision: s.geometryRevision + 1 } : s;
   }),
   deleteSpace: name => set(s => s.spaces.some(space => space.name === name) ? ({ ...withHistory(s), spaces: s.spaces.filter(space => space.name !== name), nodes: s.nodes.map(node => node.space === name ? { ...node, space: '' } : node) }) : s),
+  addVlan: (tag, name, color = '#22c55e') => set(s => {
+    const cleanName = name.trim();
+    return Number.isInteger(tag) && tag >= 1 && tag <= 4094 && cleanName && !s.vlans.some(vlan => vlan.tag === tag)
+      ? { ...withHistory(s), vlans: [...s.vlans, { id: nanoid(8), tag, name: cleanName, color }] }
+      : s;
+  }),
+  updateVlan: (id, updates) => set(s => {
+    const current = s.vlans.find(vlan => vlan.id === id);
+    if (!current) return s;
+    const tag = updates.tag ?? current.tag, name = updates.name?.trim() ?? current.name, color = updates.color ?? current.color;
+    if (!Number.isInteger(tag) || tag < 1 || tag > 4094 || !name || s.vlans.some(vlan => vlan.id !== id && vlan.tag === tag)) return s;
+    const next = { ...current, tag, name, color };
+    return JSON.stringify(current) === JSON.stringify(next) ? s : { ...withHistory(s), vlans: s.vlans.map(vlan => vlan.id === id ? next : vlan) };
+  }),
+  deleteVlan: id => set(s => s.vlans.some(vlan => vlan.id === id) ? ({
+    ...withHistory(s),
+    vlans: s.vlans.filter(vlan => vlan.id !== id),
+    nodes: s.nodes.map(node => {
+      if (!node.vlanIds?.includes(id)) return node;
+      const vlanIds = node.vlanIds.filter(vlanId => vlanId !== id);
+      return { ...node, vlanIds: vlanIds.length ? vlanIds : undefined };
+    }),
+    selectedVlanId: s.selectedVlanId === id ? null : s.selectedVlanId,
+  }) : s),
+  setNodeVlanAssignment: (nodeId, vlanId, assigned) => set(s => {
+    const node = s.nodes.find(item => item.id === nodeId);
+    if (!node || !hasEthernetPort(node) || !s.vlans.some(vlan => vlan.id === vlanId)) return s;
+    const current = node.vlanIds ?? [], vlanIds = assigned ? [...new Set([...current, vlanId])] : current.filter(id => id !== vlanId);
+    if (current.length === vlanIds.length && current.every((id, i) => id === vlanIds[i])) return s;
+    return { ...withHistory(s), nodes: s.nodes.map(item => item.id === nodeId ? { ...item, vlanIds: vlanIds.length ? vlanIds : undefined } : item) };
+  }),
   autoAlign: () => set(s => {
     const nodes = alignNodesForCables(s.nodes, s.edges, s.spaces).map(node => ({ ...node, position: snapXY(node.position) }));
     const changed = nodes.some((node, i) => !samePosition(node.position, s.nodes[i].position));
     return changed
-      ? { ...withHistory(s), nodes, selectedNodeId: null, selectedEdgeId: null, selectedNodeIds: [], geometryRevision: s.geometryRevision + 1 }
-      : { selectedNodeId: null, selectedEdgeId: null, selectedNodeIds: [] };
+      ? { ...withHistory(s), nodes, selectedNodeId: null, selectedEdgeId: null, selectedVlanId: null, selectedNodeIds: [], geometryRevision: s.geometryRevision + 1 }
+      : { selectedNodeId: null, selectedEdgeId: null, selectedVlanId: null, selectedNodeIds: [] };
   }),
   undo: () => set(s => {
     const prev = s.past.at(-1);
-    return prev ? { ...prev, past: s.past.slice(0, -1), future: [snap(s), ...s.future], transaction: null, selectedNodeId: null, selectedEdgeId: null, selectedNodeIds: [], geometryRevision: s.geometryRevision + Number(geometryChanged(s, prev)) } : s;
+    return prev ? { ...prev, past: s.past.slice(0, -1), future: [snap(s), ...s.future], transaction: null, selectedNodeId: null, selectedEdgeId: null, selectedVlanId: null, selectedNodeIds: [], geometryRevision: s.geometryRevision + Number(geometryChanged(s, prev)) } : s;
   }),
   redo: () => set(s => {
     const next = s.future[0];
-    return next ? { ...next, past: [...s.past, snap(s)].slice(-50), future: s.future.slice(1), transaction: null, selectedNodeId: null, selectedEdgeId: null, selectedNodeIds: [], geometryRevision: s.geometryRevision + Number(geometryChanged(s, next)) } : s;
+    return next ? { ...next, past: [...s.past, snap(s)].slice(-50), future: s.future.slice(1), transaction: null, selectedNodeId: null, selectedEdgeId: null, selectedVlanId: null, selectedNodeIds: [], geometryRevision: s.geometryRevision + Number(geometryChanged(s, next)) } : s;
   }),
   loadFromStorage: () => {
     try {
@@ -422,14 +475,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       const data = normalizeCanvasData(parsed, get().viewport);
       if (!data) return;
       const spaces = data.spaces.length ? data.spaces : [{ name: 'TV set', color: '#c7d2fe' }, { name: 'Control room', color: '#bbf7d0' }];
-      set(s => ({ nodes: data.nodes.map(n => ({ ...n, position: snapXY(n.position), ports: n.ports.flatMap(p => expandLabels([p.label]).map((label, i) => ({ ...p, id: i ? nanoid(8) : p.id, label, signalType: p.signalType ?? templateSignal(label) }))) })), edges: data.edges, viewport: data.viewport, spaces, past: [], future: [], transaction: null, geometryRevision: s.geometryRevision + 1 }));
+      set(s => ({ nodes: data.nodes.map(n => ({ ...n, position: snapXY(n.position), ports: n.ports.flatMap(p => expandLabels([p.label]).map((label, i) => ({ ...p, id: i ? nanoid(8) : p.id, label, signalType: p.signalType ?? templateSignal(label) }))) })), edges: data.edges, viewport: data.viewport, spaces, vlans: data.vlans, selectedNodeId: null, selectedEdgeId: null, selectedVlanId: null, selectedNodeIds: [], past: [], future: [], transaction: null, geometryRevision: s.geometryRevision + 1 }));
     } catch { /* Ignore corrupt or unavailable browser storage. */ }
   },
   loadShared: input => {
     const data = normalizeCanvasData(input, get().viewport);
     if (!data) return;
     const nodes = data.nodes.map(node => ({ ...node, position: snapXY(node.position) }));
-    set(s => ({ nodes, edges: data.edges, spaces: data.spaces, viewport: data.viewport, selectedNodeId: null, selectedEdgeId: null, selectedNodeIds: [], past: [], future: [], transaction: null, geometryRevision: s.geometryRevision + 1 }));
+    set(s => ({ nodes, edges: data.edges, spaces: data.spaces, vlans: data.vlans, viewport: data.viewport, selectedNodeId: null, selectedEdgeId: null, selectedVlanId: null, selectedNodeIds: [], past: [], future: [], transaction: null, geometryRevision: s.geometryRevision + 1 }));
   },
   saveToStorage: () => {
     try {

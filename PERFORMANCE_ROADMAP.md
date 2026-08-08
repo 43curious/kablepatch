@@ -1,17 +1,29 @@
 # Routing performance roadmap
 
-The collision-aware router currently runs in a Web Worker. Dragging uses cached routes and a lightweight orthogonal preview; final A* results are applied only when the worker returns for the latest geometry revision.
+The collision-aware routing algorithm remains unchanged and runs in a persistent Web Worker. Routing uses world-space geometry, is deferred while dragging, and ignores pan/zoom changes.
 
-## Suggested next changes
+## Implemented safeguards and infrastructure
 
-1. **Affected-route rerouting** — reroute attached and newly obstructed cables first, keeping unaffected routes as fixed occupancy. Follow with an optional full optimization pass.
-2. **Sparse rectilinear graph** — search connector leads, obstacle boundaries, occupied tracks, lane offsets, and waypoints instead of every 8px grid coordinate.
-3. **Numeric A* state** — replace string state keys and per-state objects with numeric IDs, typed arrays, generation markers, and reusable buffers.
-4. **Numeric occupancy indexes** — replace string bucket keys and temporary sets with track-oriented interval indexes and reusable candidate buffers.
-5. **Parallel rip-up passes** — run independent deterministic routing orders in separate workers and select the same best score.
-6. **Stronger A* pruning** — use an obstacle-safe upper bound, bend-aware heuristics, direct jumps to interesting coordinates, and deterministic constrained-edge priority.
-7. **WASM only after numeric refactoring** — consider Rust/WASM inside a Worker after the router uses flat numeric data; avoid porting the current object-heavy implementation directly.
+1. Exact golden fixtures for dense obstacles, shared terminals, manual waypoints, crossings, and unroutable results.
+2. Independent routing invariant validation covering components, horizontal and vertical lane spacing, overlaps, crossing turns, endpoints, directions, waypoints, and crossing reports.
+3. Worker and main-thread telemetry for queueing, coalescing, scene construction, routing, round-trip latency, and stale results.
+4. Persistent Worker reuse with monotonic request IDs and stale-result rejection.
+5. Trailing request coalescing with at most one active and one latest pending request.
+6. Worker-side obstacle-scene caching keyed by effective component geometry and clearance.
+7. Development-only final route validation, removed from production bundles.
+
+## Higher-risk ideas intentionally deferred
+
+- Affected-route rerouting with fixed occupancy.
+- Sparse rectilinear graphs.
+- Numeric or typed-array A* rewrites.
+- Numeric occupancy indexes.
+- Parallel routing-order passes.
+- Heuristic/scoring changes.
+- WASM rewrites.
+
+These should only be reconsidered after profiling and must remain byte-for-byte compatible with the golden fixtures unless a route-quality change is explicitly approved.
 
 ## Quality constraints
 
-Any optimization must preserve obstacle clearance, lane spacing, endpoint direction, manual waypoints, deterministic output, strict crossing behavior, and explicit unroutable results. Run the routing golden and invariant suites before comparing performance.
+Any future optimization must preserve obstacle clearance, horizontal and vertical lane spacing, endpoint direction, manual waypoints, deterministic output, strict crossing behavior, and explicit unroutable results.

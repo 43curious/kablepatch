@@ -6,11 +6,13 @@ import CanvasEdge from './CanvasEdge';
 import CanvasNode from './CanvasNode';
 import { CABLE_LANE_SPACING, GRID, HALF_GRID, PORT_MARGIN, nodeHeight, nodeWidth, pointsToSvgPath, portDirection, portPosition, routeOrthogonalConnection, snapXY, straightPath, toWorld } from './geometry';
 import type { EdgeRouteInput, RoutedEdge } from './geometry';
-import type { RoutingWorkerResponse } from './routingWorkerProtocol';
+import { RoutingWorkerClient } from './routingWorkerClient';
 import FloatingToolbar from '../panels/FloatingToolbar';
 import type { CanvasDocument } from './share';
 import { createGeometryIndex, createGraphIndex, resolveEdges } from '../../graph/indexes';
 import type { GeometryIndex } from '../../graph/indexes';
+import { historyShortcut, shouldStartCanvasPan } from './canvasInteractions';
+import { SIGNAL_TYPES } from '../../nodes/NodeTypes';
 
 type Endpoint = { node: Node; port: Port };
 type Draft = (Endpoint & { to: XY }) | null;
@@ -18,6 +20,7 @@ type Clipboard = { nodes: Node[]; edges: Edge[] };
 
 const samePoint = (a: XY, b: XY) => a.x === b.x && a.y === b.y;
 const sameRouteInput = (a: EdgeRouteInput | undefined, b: EdgeRouteInput) => !!a
+  && a.sourceNodeId === b.sourceNodeId && a.targetNodeId === b.targetNodeId
   && samePoint(a.source, b.source) && samePoint(a.target, b.target)
   && a.sourceSide === b.sourceSide && a.targetSide === b.targetSide
   && JSON.stringify(a.waypoints ?? []) === JSON.stringify(b.waypoints ?? []);
@@ -28,8 +31,7 @@ export default function Canvas() {
   const pasteCount = useRef(0);
   const routeCache = useRef(new Map<string, RoutedEdge>());
   const routeInputCache = useRef(new Map<string, EdgeRouteInput>());
-  const routingWorker = useRef<Worker | null>(null);
-  const routingRequestId = useRef(0);
+  const routingClient = useRef<RoutingWorkerClient | null>(null);
   const geometryCache = useRef<GeometryIndex | undefined>(undefined);
   const readOnlyRef = useRef(false);
   const wheelFrame = useRef(0);
@@ -38,8 +40,8 @@ export default function Canvas() {
   const draftPending = useRef<XY | null>(null);
   const draftRef = useRef<Draft>(null);
   const s = useCanvasStore(useShallow(state => ({
-    nodes: state.nodes, edges: state.edges, viewport: state.viewport, spaces: state.spaces,
-    selectedNodeId: state.selectedNodeId, selectedEdgeId: state.selectedEdgeId, selectedNodeIds: state.selectedNodeIds,
+    nodes: state.nodes, edges: state.edges, viewport: state.viewport, spaces: state.spaces, vlans: state.vlans,
+    selectedNodeId: state.selectedNodeId, selectedEdgeId: state.selectedEdgeId, selectedVlanId: state.selectedVlanId, selectedNodeIds: state.selectedNodeIds,
     draggingNodeId: state.draggingNodeId, geometryRevision: state.geometryRevision,
     setViewport: state.setViewport, selectNode: state.selectNode, selectEdge: state.selectEdge,
     deleteNode: state.deleteNode, deleteEdge: state.deleteEdge, undo: state.undo, redo: state.redo,
@@ -75,13 +77,39 @@ export default function Canvas() {
   }, []);
 
   useEffect(() => {
+    const client = new RoutingWorkerClient({
+      createWorker: () => new Worker(new URL('./routing.worker.ts', import.meta.url), { type: 'module' }),
+      onRoutes: (response, job) => {
+        routeCache.current = new Map(response.routes.map(route => [route.id, route]));
+        routeInputCache.current = new Map(job.edges.map(input => [input.id, input]));
+        setRouteVersion(version => version + 1);
+      },
+      onError: message => console.error(`Cable routing failed: ${message}`),
+      onStateChange: setRouting,
+      onTelemetry: telemetry => {
+        if (typeof performance !== 'undefined') {
+          performance.clearMeasures('iko-connect:cable-routing');
+          performance.measure('iko-connect:cable-routing', {
+            start: Math.max(0, performance.now() - telemetry.roundTripMs),
+            duration: telemetry.roundTripMs,
+            detail: telemetry,
+          });
+        }
+        if (import.meta.env.DEV) console.debug('Cable routing telemetry', telemetry);
+      },
+    });
+    routingClient.current = client;
+    return () => { client.dispose(); routingClient.current = null; };
+  }, []);
+
+  useEffect(() => {
     const store = useCanvasStore.getState();
     store.loadFromStorage();
     let previous = useCanvasStore.getState(), saveTimer = 0;
     const save = () => { saveTimer = 0; if (!readOnlyRef.current) useCanvasStore.getState().saveToStorage(); };
     const schedule = () => { if (saveTimer) window.clearTimeout(saveTimer); saveTimer = window.setTimeout(save, 250); };
     const unsubscribe = useCanvasStore.subscribe(next => {
-      const documentChanged = next.nodes !== previous.nodes || next.edges !== previous.edges || next.spaces !== previous.spaces;
+      const documentChanged = next.nodes !== previous.nodes || next.edges !== previous.edges || next.spaces !== previous.spaces || next.vlans !== previous.vlans;
       const interactionCommitted = (!!previous.transaction && !next.transaction) || (!!previous.draggingNodeId && !next.draggingNodeId);
       if (next.viewport !== previous.viewport || interactionCommitted || documentChanged && !next.transaction && !next.draggingNodeId) schedule();
       previous = next;
@@ -101,8 +129,8 @@ export default function Canvas() {
   }, [clearDraft]);
 
   const panStart = (e: React.PointerEvent<SVGSVGElement>) => {
-    const insideGroup = (e.target as Element).closest('g');
-    if ((e.button !== 1 && !space) || insideGroup) {
+    const insideGroup = !!(e.target as Element).closest('g');
+    if (!shouldStartCanvasPan(e.button, space, insideGroup)) {
       if (e.button === 0 && !insideGroup) { setConnection(null); useCanvasStore.getState().selectNode(null); }
       return;
     }
@@ -160,6 +188,9 @@ export default function Canvas() {
     setViewport({ x: (width - (maxX - minX) * zoom) / 2 - minX * zoom, y: (r.height - (maxY - minY) * zoom) / 2 - minY * zoom, zoom });
   }, []);
   const dragSpace = (name: string, e: React.PointerEvent<SVGGElement>) => {
+    // Only primary-button gestures move a space. Middle-button gestures bubble
+    // to the SVG canvas so panning works exactly as it does over blank areas.
+    if (e.button !== 0) return;
     e.stopPropagation();
     const state = useCanvasStore.getState();
     state.beginTransaction();
@@ -202,8 +233,8 @@ export default function Canvas() {
       if (e.code === 'Space') setSpace(true);
       if (e.key === 'Escape') { clearDraft(); setConnection(null); state.selectNode(null); }
       if (e.key === 'Delete' || e.key === 'Backspace') { if (state.selectedNodeId) state.deleteNode(state.selectedNodeId); if (state.selectedEdgeId) state.deleteEdge(state.selectedEdgeId); }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') e.shiftKey ? state.redo() : state.undo();
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') state.redo();
+      const historyAction = historyShortcut(e.key, e.ctrlKey, e.metaKey, e.shiftKey);
+      if (historyAction) { e.preventDefault(); historyAction === 'redo' ? state.redo() : state.undo(); }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
         const ids = state.selectedNodeIds.length ? state.selectedNodeIds : state.selectedNodeId ? [state.selectedNodeId] : [];
         if (ids.length) {
@@ -228,52 +259,19 @@ export default function Canvas() {
   }, [clearDraft, fit]);
 
   useEffect(() => {
-    const requestId = ++routingRequestId.current;
-    routingWorker.current?.terminate();
-    routingWorker.current = null;
-    if (s.draggingNodeId) { setRouting(false); return; }
+    const client = routingClient.current;
+    if (!client) return;
+    if (s.draggingNodeId) { client.cancel(); return; }
     if (!routeInputs.length) {
-      routeCache.current.clear(); routeInputCache.current.clear(); setRouteVersion(version => version + 1); setRouting(false);
+      client.cancel();
+      routeCache.current.clear(); routeInputCache.current.clear(); setRouteVersion(version => version + 1);
       return;
     }
-    setRouting(true);
-    const timer = window.setTimeout(() => {
-      const worker = new Worker(new URL('./routing.worker.ts', import.meta.url), { type: 'module' });
-      routingWorker.current = worker;
-      worker.onmessage = (event: MessageEvent<RoutingWorkerResponse>) => {
-        const response = event.data;
-        if (response.requestId !== routingRequestId.current) return;
-        if (response.routes) {
-          routeCache.current = new Map(response.routes.map(route => [route.id, route]));
-          routeInputCache.current = new Map(routeInputs.map(input => [input.id, input]));
-          setRouteVersion(version => version + 1);
-        } else if (response.error) console.error(`Cable routing failed: ${response.error}`);
-        setRouting(false);
-        worker.terminate();
-        if (routingWorker.current === worker) routingWorker.current = null;
-      };
-      worker.onerror = error => {
-        if (requestId !== routingRequestId.current) return;
-        console.error('Cable routing worker failed', error);
-        setRouting(false);
-        worker.terminate();
-        if (routingWorker.current === worker) routingWorker.current = null;
-      };
-      worker.postMessage({
-        requestId,
-        edges: routeInputs,
-        nodes: s.nodes,
-        options: {
-          portMargin: PORT_MARGIN,
-          laneSpacing: CABLE_LANE_SPACING,
-          obstacleClearance: HALF_GRID,
-        },
-      });
-    }, 16);
-    return () => {
-      window.clearTimeout(timer);
-      if (routingWorker.current) { routingWorker.current.terminate(); routingWorker.current = null; }
-    };
+    client.schedule({
+      edges: routeInputs,
+      nodes: s.nodes,
+      options: { portMargin: PORT_MARGIN, laneSpacing: CABLE_LANE_SPACING, obstacleClearance: HALF_GRID },
+    });
     // routeInputs/nodes are intentionally invalidated by geometryRevision.
   }, [s.geometryRevision, s.draggingNodeId]);
 
@@ -335,8 +333,9 @@ export default function Canvas() {
     useCanvasStore.getState().loadShared(document.canvas);
   };
   const selectedResolvedEdge = resolvedEdges.find(item => item.edge.id === s.selectedEdgeId);
-  const connectionText = selectedResolvedEdge ? `${selectedResolvedEdge.sourceNode.label} / ${selectedResolvedEdge.sourcePort.label} → ${selectedResolvedEdge.targetNode.label} / ${selectedResolvedEdge.targetPort.label}` : '';
   const selectedNodes = useMemo(() => new Set(s.selectedNodeIds), [s.selectedNodeIds]);
+  const selectedVlan = s.vlans.find(vlan => vlan.id === s.selectedVlanId);
+  const highlightedNodes = useMemo(() => new Set(selectedVlan ? (graphIndex.nodesByVlanId.get(selectedVlan.id) ?? []).map(node => node.id) : []), [selectedVlan, graphIndex]);
   const spaceBoxes = useMemo(() => s.spaces.map(space => {
     const ns = graphIndex.nodesBySpace.get(space.name) ?? [];
     if (!ns.length) return null;
@@ -355,14 +354,14 @@ export default function Canvas() {
       <g transform={`translate(${s.viewport.x} ${s.viewport.y}) scale(${s.viewport.zoom})`}>
         {spaceBoxes.map(b => <g className="space-box" key={b.name} onPointerDown={readOnly ? undefined : e => dragSpace(b.name, e)}><rect x={b.x} y={b.y} width={b.w} height={b.h} fill={b.color} stroke={b.color} /><text x={b.x + 10} y={b.y + 20}>{b.name}</text></g>)}
         <g className="cable-layer">{resolvedEdges.map(item => <CanvasEdge key={item.edge.id} edge={item.edge} sourcePort={item.sourcePort} source={item.source} target={item.target} selected={s.selectedEdgeId === item.edge.id} dimmed={!!s.selectedEdgeId && s.selectedEdgeId !== item.edge.id} path={edgePaths.get(item.edge.id)} />)}</g>
-        <g className="device-layer">{s.nodes.map(n => <CanvasNode key={n.id} node={n} geometry={geometryIndex.byNodeId.get(n.id)!} selected={s.selectedNodeId === n.id || selectedNodes.has(n.id)} readOnly={readOnly} connection={connection ? { nodeId: connection.node.id, port: connection.port } : undefined} onPortDown={portDown} onPortUp={portUp} onPortClick={portClick} />)}</g>
+        <g className="device-layer">{s.nodes.map(n => <CanvasNode key={n.id} node={n} geometry={geometryIndex.byNodeId.get(n.id)!} selected={s.selectedNodeId === n.id || selectedNodes.has(n.id)} highlightColor={highlightedNodes.has(n.id) ? selectedVlan?.color : undefined} readOnly={readOnly} connection={connection ? { nodeId: connection.node.id, port: connection.port } : undefined} onPortDown={portDown} onPortUp={portUp} onPortClick={portClick} />)}</g>
         {!readOnly && draft && <path d={straightPath(portPosition(draft.node, draft.port.id), draft.to, s.nodes, 0, portDirection(draft.node, draft.port))} fill="none" stroke="#0f172a" strokeWidth={2} strokeDasharray="6 4" />}
       </g>
     </svg>
     <div className="zoom-controls"><button onClick={() => s.setViewport({ ...s.viewport, zoom: Math.min(3, s.viewport.zoom * 1.2) })}>+</button><button onClick={() => s.setViewport({ ...s.viewport, zoom: Math.max(.2, s.viewport.zoom / 1.2) })}>−</button><button onClick={fit}>Fit</button><button onClick={() => s.setViewport({ x: 0, y: 0, zoom: 1 })}>100%</button></div>
     {!readOnly && <FloatingToolbar svgRef={svgRef} onOpenCanvas={openDocument} onAutoAlign={() => { s.autoAlign(); requestAnimationFrame(fit); }} />}
+    {selectedResolvedEdge && <aside className="connection-info" aria-label="Selected cable connection"><header><div><b>Connection</b><span>{SIGNAL_TYPES[selectedResolvedEdge.sourcePort.signalType].label}</span></div>{!readOnly && <button aria-label="Close connection details" title="Close" onClick={() => s.selectEdge(null)}>×</button>}</header><div className="connection-route"><section><small>From</small><strong>{selectedResolvedEdge.sourceNode.label}</strong><span>{selectedResolvedEdge.sourcePort.label}</span></section><span className="connection-arrow" aria-hidden="true">→</span><section><small>To</small><strong>{selectedResolvedEdge.targetNode.label}</strong><span>{selectedResolvedEdge.targetPort.label}</span></section></div></aside>}
     {routing && !s.draggingNodeId && <div className="routing-badge">Routing cables…</div>}
     {readOnly && <div className="read-only-badge">Read-only view</div>}
-    {readOnly && connectionText && <div className="read-only-connection"><b>Connection</b><br />{connectionText}</div>}
   </div>;
 }

@@ -21,6 +21,31 @@ describe('canvas document normalization', () => {
     expect(data?.edges[0].waypoints).toEqual([{ x: 10, y: 20 }]);
   });
 
+  it('normalizes VLANs and keeps assignments only on Ethernet components', () => {
+    const networked = { ...source, ports: [{ ...source.ports[0], label: 'ETH', signalType: 'ethernet' as const }], vlanIds: ['control', 'missing', 'control'] };
+    const analog = { ...target, vlanIds: ['control'] };
+    const data = normalizeCanvasData({
+      nodes: [networked, analog], edges: [], spaces: [], viewport: { x: 0, y: 0, zoom: 1 },
+      vlans: [
+        { id: 'control', tag: 10, name: 'Control', color: '#22c55e' },
+        { id: 'duplicate-tag', tag: 10, name: 'Duplicate', color: '#000000' },
+        { id: 'invalid', tag: 5000, name: 'Invalid', color: '#000000' },
+      ],
+    })!;
+
+    expect(data.vlans).toEqual([{ id: 'control', tag: 10, name: 'Control', color: '#22c55e' }]);
+    expect(data.nodes[0].vlanIds).toEqual(['control']);
+    expect(data.nodes[1].vlanIds).toBeUndefined();
+  });
+
+  it('migrates legacy Ethernet switch ports and defaults missing VLANs', () => {
+    const legacySwitch = { ...source, layout: 'ethernet-switch' as const, ports: [{ ...source.ports[0], label: 'ETH 1', side: 'bidirectional' as const, signalType: 'analog_audio' as const }] };
+    const data = normalizeCanvasData({ nodes: [legacySwitch], edges: [], spaces: [], viewport: { x: 0, y: 0, zoom: 1 } })!;
+
+    expect(data.vlans).toEqual([]);
+    expect(data.nodes[0].ports[0].signalType).toBe('ethernet');
+  });
+
   it('uses a safe viewport fallback and round-trips valid state', () => {
     const fallback = { x: 5, y: 6, zoom: 2 };
     const data = normalizeCanvasData({ nodes: [source], edges: [], spaces: [], viewport: { x: 0, y: 0, zoom: 0 } }, fallback)!;

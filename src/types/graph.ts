@@ -16,6 +16,15 @@ export interface Port {
   groupId?: string;
 }
 
+export interface Vlan {
+  /** Stable project-local identifier used by component assignments. */
+  id: string;
+  /** IEEE 802.1Q VLAN identifier. */
+  tag: number;
+  name: string;
+  color: string;
+}
+
 export interface Node {
   id: string;
   label: string;
@@ -28,8 +37,12 @@ export interface Node {
   /** Optional physical layout variant. */
   layout?: 'ethernet-switch';
   space?: string;
+  /** A networked component may participate in multiple project VLANs. */
+  vlanIds?: string[];
   notes?: string;
 }
+
+export const hasEthernetPort = (node: Pick<Node, 'ports'>) => node.ports.some(port => port.signalType === 'ethernet');
 
 export interface Edge {
   id: string;

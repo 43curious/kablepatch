@@ -86,6 +86,6 @@ export const templateSignal = (label: string): SignalType => {
   if (s.includes('hdmi')) return 'hdmi';
   if (s.includes('aes') || s.includes('spdif') || s.includes('adat') || s.includes('tdm')) return 'digital_audio';
   if (s.includes('tally') || s.includes('gpio')) return 'gpio';
-  if (s.includes('control') || s.includes('port')) return 'ethernet';
+  if (/\beth(?:ernet)?\b/.test(s) || s.includes('control') || s.includes('port')) return 'ethernet';
   return 'analog_audio';
 };

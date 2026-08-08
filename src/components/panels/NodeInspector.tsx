@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { CATEGORY_COLORS, SIGNAL_TYPES } from '../../nodes/NodeTypes';
 import { useCanvasStore } from '../../store/canvasStore';
+import { hasEthernetPort } from '../../types/graph';
 import type { Port, SignalType } from '../../types/graph';
 
 type PortGroup = { side: Port['side']; type: string; amount: number; signalType: SignalType; ids: string[]; aliases: (string[] | undefined)[]; groupId?: string; position?: Port['position']; before?: string; after?: string };
@@ -27,7 +28,7 @@ export default function NodeInspector({ categories }: { categories: string[] }) 
     const selected = state.nodes.find(item => item.id === selectedNodeId);
     return selected ? {
       id: selected.id, label: selected.label, category: selected.category, headerColor: selected.headerColor,
-      catalogId: selected.catalogId, ports: selected.ports, space: selected.space, notes: selected.notes,
+      catalogId: selected.catalogId, ports: selected.ports, space: selected.space, vlanIds: selected.vlanIds, notes: selected.notes,
     } : null;
   }));
   const updateNode = useCanvasStore(state => state.updateNode);
@@ -36,6 +37,8 @@ export default function NodeInspector({ categories }: { categories: string[] }) 
   const commitTransaction = useCanvasStore(state => state.commitTransaction);
   const portLayer = useCanvasStore(state => state.portLayer);
   const spaces = useCanvasStore(state => state.spaces);
+  const vlans = useCanvasStore(state => state.vlans);
+  const setNodeVlanAssignment = useCanvasStore(state => state.setNodeVlanAssignment);
   useEffect(() => () => useCanvasStore.getState().commitTransaction(), [selectedNodeId]);
   if (!node) return null;
   const inputGroups = portGroups(node.ports.filter(p => p.side === 'input'));
@@ -50,7 +53,7 @@ export default function NodeInspector({ categories }: { categories: string[] }) 
   const patchAlias = (id: string, value: string) => updateNode(node.id, { ports: node.ports.map(p => p.id === id ? { ...p, aliases: Object.assign([...(p.aliases ?? [])], { [portLayer - 1]: value }) } : p) });
   const savePreset = () => {
     const saved = JSON.parse(localStorage.getItem(COMPONENTS_KEY) ?? '[]') as { label: string; category?: string }[];
-    const preset = { id: crypto.randomUUID(), label: node.label, category: node.category || 'Custom', inputGroups, outputGroups };
+    const preset = { id: crypto.randomUUID(), label: node.label, category: node.category || 'Custom', inputGroups, outputGroups, bidirectionalGroups };
     localStorage.setItem(COMPONENTS_KEY, JSON.stringify([...saved.filter(x => x.label !== preset.label || (x.category || 'Custom') !== preset.category), preset]));
     updateNode(node.id, { catalogId: preset.id });
     window.dispatchEvent(new Event('audiopatch-components-changed'));
@@ -65,6 +68,7 @@ export default function NodeInspector({ categories }: { categories: string[] }) 
     <label>Category<select value={node.category} onChange={e => updateNode(node.id, { category: e.target.value, headerColor: CATEGORY_COLORS[e.target.value] ?? CATEGORY_COLORS.Custom })}>{categories.map(category => <option key={category}>{category}</option>)}</select></label>
     <label>Color<input type="color" value={node.headerColor} onChange={e => updateNode(node.id, { headerColor: e.target.value })} /></label>
     <label>Space<select value={node.space ?? ''} onChange={e => updateNode(node.id, { space: e.target.value })}><option value="">No space</option>{spaces.map(x => <option key={x.name} value={x.name}>{x.name}</option>)}</select></label>
+    {hasEthernetPort(node) && <div className="vlan-assignments"><h3>VLANs</h3>{vlans.length ? [...vlans].sort((a, b) => a.tag - b.tag).map(vlan => <label key={vlan.id}><input type="checkbox" checked={node.vlanIds?.includes(vlan.id) ?? false} onChange={event => setNodeVlanAssignment(node.id, vlan.id, event.target.checked)} /><span className="vlan-swatch" style={{ background: vlan.color }} />VLAN {vlan.tag} · {vlan.name}</label>) : <p className="empty-state">Create a VLAN in Project to assign this networked component.</p>}</div>}
     <h3>Ports</h3>
     <b>Inputs</b>{inputGroups.map((g, i) => <div className="port-edit" key={`input-${i}`} onDragOver={e => e.preventDefault()} onDrop={e => moveGroup('input', inputGroups, Number(e.dataTransfer.getData('text/plain')), i)}>
       <span className="drag-handle" draggable onDragStart={e => e.dataTransfer.setData('text/plain', String(i))}>↕</span>
@@ -89,7 +93,7 @@ export default function NodeInspector({ categories }: { categories: string[] }) 
       <select aria-label="Port side" value={g.position ?? 'left'} onChange={e => applyGroups('bidirectional', bidirectionalGroups.map((x, n) => n === i ? { ...x, position: e.target.value as Port['position'] } : x))}><option value="left">Left</option><option value="right">Right</option><option value="top">Top</option><option value="bottom">Bottom</option></select>
       <button onClick={() => applyGroups('bidirectional', bidirectionalGroups.filter((_, n) => n !== i))}>×</button>
     </div>)}
-    <div className="toolbar-actions"><button onClick={() => applyGroups('output', [...outputGroups, { side: 'output', type: 'NEW OUTPUT', amount: 1, signalType: 'analog_audio', ids: [], aliases: [], groupId: crypto.randomUUID() }])}>+ output</button><button onClick={() => applyGroups('bidirectional', [...bidirectionalGroups, { side: 'bidirectional', position: 'left', type: 'ETHERNET', amount: 1, signalType: 'ethernet', ids: [], aliases: [], groupId: crypto.randomUUID() }])}>+ bidirectional</button><button onClick={savePreset}>Save to library</button></div>
+    <div className="toolbar-actions"><button onClick={() => applyGroups('output', [...outputGroups, { side: 'output', type: 'NEW OUTPUT', amount: 1, signalType: 'analog_audio', ids: [], aliases: [], groupId: crypto.randomUUID() }])}>+ output</button><button onClick={() => applyGroups('bidirectional', [...bidirectionalGroups, { side: 'bidirectional', position: 'left', type: 'ETHERNET', amount: 1, signalType: 'ethernet', ids: [], aliases: [], groupId: crypto.randomUUID() }])}>+ bidirectional</button><button onClick={savePreset}>Save as preset</button></div>
     {portLayer > 0 && <><h3>Alias layer {portLayer}</h3>{node.ports.map(p => <label className="alias-edit" key={p.id}>{p.label}<input placeholder={p.label} value={p.aliases?.[portLayer - 1] ?? ''} onChange={e => patchAlias(p.id, e.target.value)} /></label>)}</>}
     <label>Notes<textarea value={node.notes ?? ''} onChange={e => updateNode(node.id, { notes: e.target.value })} /></label>
     <button className="danger" onClick={() => confirm('Delete this node?') && deleteNode(node.id)}>Delete node</button>

@@ -5,7 +5,9 @@
 html, body, #root { margin: 0; width: 100%; height: 100%; overflow: hidden; }
 .app, .canvas { width: 100vw; height: 100vh; display: block; }
 .canvas { cursor: default; touch-action: none; user-select: none; }
-.node-header, .space-box { cursor: move; }
+.node-header, .node-header-label { cursor: grab; }
+.node-header:active, .node-header-label:active { cursor: grabbing; }
+.space-box { cursor: move; }
 .connection-dot { cursor: crosshair; transition: opacity .12s, r .12s, stroke-width .12s; }
 .connection-dot:hover, .connection-dot.active, .connection-dot.compatible { r: 6; }
 .connection-dot.active { stroke: #0f172a; stroke-width: 2.5; }
@@ -22,30 +24,43 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 button.primary { color: white; background: #2563eb; }
 button.primary:hover { background: #1d4ed8; }
 .zoom-controls { position: fixed; left: 16px; bottom: 16px; display: flex; gap: 6px; padding: 6px; border: 1px solid #e2e8f0; border-radius: 10px; background: rgba(255,255,255,.94); box-shadow: 0 5px 18px rgba(15,23,42,.12); }
-.read-only-badge, .read-only-connection { position: fixed; right: 16px; z-index: 2; padding: 10px 12px; border: 1px solid #bfdbfe; border-radius: 9px; color: #1e3a8a; background: rgba(239,246,255,.96); box-shadow: 0 5px 18px rgba(15,23,42,.1); font-size: 12px; }
-.read-only-badge { top: 16px; font-weight: 800; }
-.routing-badge { position: fixed; left: 16px; top: 16px; z-index: 2; padding: 7px 10px; border: 1px solid #cbd5e1; border-radius: 9px; color: #475569; background: rgba(255,255,255,.94); box-shadow: 0 5px 18px rgba(15,23,42,.1); font-size: 12px; font-weight: 700; }
-.read-only-connection { top: 60px; max-width: min(360px, calc(100vw - 32px)); line-height: 1.45; }
+.read-only-badge { position: fixed; right: 16px; top: 16px; z-index: 2; padding: 10px 12px; border: 1px solid #bfdbfe; border-radius: 9px; color: #1e3a8a; background: rgba(239,246,255,.96); box-shadow: 0 5px 18px rgba(15,23,42,.1); font-size: 12px; font-weight: 800; }
+.routing-badge { position: fixed; left: 50%; top: 16px; z-index: 2; padding: 7px 10px; border: 1px solid #cbd5e1; border-radius: 9px; color: #475569; background: rgba(255,255,255,.94); box-shadow: 0 5px 18px rgba(15,23,42,.1); font-size: 12px; font-weight: 700; transform: translateX(-50%); }
 
-.side-stack { position: fixed; right: 16px; top: 16px; z-index: 2; width: min(360px, calc(100vw - 32px)); }
+.side-stack { position: fixed; right: 16px; top: 16px; z-index: 2; width: min(360px, calc(100vw - 32px)); transition: width .16s ease; }
+.side-stack.sidebar-collapsed { width: 48px; }
 .toolbar { position: relative; max-height: calc(100vh - 32px); overflow: auto; padding: 18px; border: 1px solid #dbe4ef; border-radius: 14px; background: rgba(255,255,255,.97); box-shadow: 0 14px 40px rgba(15,23,42,.18); }
 .toolbar.expanded { max-height: calc(100vh - 32px); }
-.collapse { position: absolute; top: 13px; right: 13px; width: 30px; min-height: 30px; padding: 0; border-radius: 50%; font-size: 18px; line-height: 1; }
-.panel-title { padding-right: 38px; margin-bottom: 16px; }
-.panel-title span { display: block; margin-bottom: 2px; color: #64748b; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-.toolbar h2, .inspector h2 { margin: 0; color: #0f172a; font-size: 21px; letter-spacing: -.02em; }
+.toolbar.collapsed { width: 48px; height: 44px; min-height: 44px; overflow: hidden; padding: 5px; border-radius: 12px; }
+.sidebar-topbar { position: sticky; top: -18px; z-index: 3; display: flex; align-items: center; gap: 8px; margin: -10px 0 12px; padding: 10px 0 8px; background: rgba(255,255,255,.98); }
+.toolbar.collapsed .sidebar-topbar { position: static; margin: 0; padding: 0; background: transparent; }
+.sidebar-toggle { display: inline-flex; flex: 0 0 36px; align-items: center; justify-content: center; width: 36px; min-height: 32px; padding: 5px; border: 1px solid #bfdbfe; border-radius: 9px; color: #1d4ed8; background: #eff6ff; box-shadow: 0 1px 3px rgba(37,99,235,.12); }
+.sidebar-toggle svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.sidebar-toggle:hover { color: white; border-color: #2563eb; background: #2563eb; }
 .toolbar label, .toolbar b, .inspector label, .inspector b { display: block; color: #475569; font-size: 12px; font-weight: 750; }
 .toolbar label { margin-top: 11px; }
 .toolbar input, .toolbar select, .toolbar textarea, .inspector input, .inspector select, .inspector textarea { width: 100%; min-height: 36px; margin: 5px 0 10px; padding: 7px 9px; border: 1px solid #cbd5e1; border-radius: 7px; color: #172033; background: white; }
 .toolbar textarea, .inspector textarea { min-height: 76px; resize: vertical; }
 .toolbar-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 14px; }
 .toolbar-actions button { flex: 1 0 auto; }
-.tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; margin-bottom: 14px; padding: 3px; border-radius: 9px; background: #e8eef7; }
-.tabs button { border: 0; background: transparent; }
-.tabs button:disabled { cursor: not-allowed; color: #94a3b8; }
-.tabs .active { color: #1d4ed8; background: white; box-shadow: 0 1px 3px rgba(15,23,42,.12); font-weight: 750; }
+.tabs { display: grid; flex: 1; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; margin: 0; padding: 3px; border-radius: 10px; background: #e8eef7; }
+.tabs button { min-width: 0; min-height: 32px; overflow: hidden; padding: 5px 4px; border: 0; background: transparent; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.tabs .active { color: #1d4ed8; background: white; box-shadow: 0 1px 3px rgba(15,23,42,.12); font-weight: 800; }
 .notice { margin: 0 0 12px; padding: 9px 10px; border: 1px solid #86efac; border-radius: 8px; color: #166534; background: #ecfdf5; font-size: 12px; font-weight: 700; }
-.connection-info { margin-top: 10px; padding: 11px; border: 1px solid #dbe4ef; border-radius: 10px; background: rgba(255,255,255,.97); box-shadow: 0 5px 18px rgba(15,23,42,.1); font-size: 12px; line-height: 1.45; }
+.connection-info { position: fixed; left: 16px; top: 16px; z-index: 4; width: min(420px, calc(100vw - 32px)); padding: 13px; border: 1px solid #cbd5e1; border-radius: 12px; color: #172033; background: rgba(255,255,255,.98); box-shadow: 0 12px 32px rgba(15,23,42,.18); }
+.connection-info header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 11px; }
+.connection-info header > div { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.connection-info header b { color: #0f172a; font-size: 14px; }
+.connection-info header span { overflow: hidden; color: #64748b; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.connection-info header button { flex: 0 0 28px; min-height: 28px; padding: 0; color: #64748b; background: transparent; font-size: 18px; }
+.connection-route { display: grid; grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr); gap: 6px; align-items: center; }
+.connection-route section { min-width: 0; padding: 9px 10px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; }
+.connection-route small, .connection-route strong, .connection-route section > span { display: block; }
+.connection-route small { margin-bottom: 3px; color: #64748b; font-size: 9px; font-weight: 850; letter-spacing: .09em; text-transform: uppercase; }
+.connection-route strong { overflow-wrap: anywhere; color: #0f172a; font-size: 12px; line-height: 1.3; }
+.connection-route section > span { overflow-wrap: anywhere; margin-top: 3px; color: #475569; font-size: 11px; line-height: 1.3; }
+.connection-arrow { color: #2563eb; font-size: 21px; font-weight: 800; text-align: center; }
+.connection-info ~ .read-only-badge { top: auto; bottom: 16px; }
 
 .space-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
 .space-list span { display: flex; align-items: center; gap: 4px; padding: 4px 6px; border: 1px solid #e2e8f0; border-radius: 7px; background: #f8fafc; font-size: 12px; }
@@ -53,8 +68,37 @@ button.primary:hover { background: #1d4ed8; }
 .space-list button { min-height: 22px; padding: 0 4px; color: #b91c1c; background: transparent; }
 
 .custom-object { margin-bottom: 12px; padding: 13px; border: 1px solid #dbe4ef; border-radius: 10px; background: #f8fafc; }
-.export-panel section { margin: 0 0 10px; padding: 13px; border: 1px solid #dbe4ef; border-radius: 10px; background: #f8fafc; }
-.export-panel h3 { margin: 0; color: #0f172a; font-size: 14px; }
+.project-panel > section, .export-panel section { margin: 0 0 10px; padding: 13px; border: 1px solid #dbe4ef; border-radius: 10px; background: #f8fafc; }
+.project-panel > section > h3, .export-panel h3 { margin: 0; color: #0f172a; font-size: 14px; }
+.project-panel .inspector { margin-top: 8px; padding-top: 0; border-top: 0; }
+.project-panel .empty-state { margin: 10px 0 2px; text-align: left; line-height: 1.45; }
+.vlan-project > p { margin: 5px 0 11px; color: #64748b; font-size: 12px; line-height: 1.4; }
+.vlan-add { display: grid; grid-template-columns: 62px minmax(0, 1fr) 36px 42px; gap: 6px; align-items: center; margin-bottom: 10px; }
+.vlan-add input, .vlan-add button { min-width: 0; min-height: 34px; margin: 0; }
+.vlan-add input[type="color"] { width: 36px; padding: 3px; }
+.vlan-add button { padding-inline: 6px; }
+.vlan-list { display: grid; gap: 6px; }
+.vlan-row { display: grid; grid-template-columns: minmax(0, 1fr) 30px 42px 30px; gap: 5px; align-items: center; padding: 4px; border: 1px solid #dbe4ef; border-radius: 8px; background: white; }
+.vlan-row.active { border-color: #60a5fa; background: #eff6ff; box-shadow: 0 0 0 1px #bfdbfe; }
+.vlan-row > input[type="color"] { width: 30px; min-height: 30px; height: 30px; margin: 0; padding: 2px; }
+.vlan-row > button:not(.vlan-select) { min-width: 30px; min-height: 30px; padding: 3px 5px; font-size: 11px; }
+.vlan-select { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 5px 7px; text-align: left; background: transparent; }
+.vlan-select:hover { background: #f1f5f9; }
+.vlan-select > span:last-child { min-width: 0; }
+.vlan-select b { color: #172033; font-size: 12px; }
+.vlan-select small { display: block; overflow: hidden; margin-top: 2px; color: #64748b; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.vlan-swatch { display: inline-block; flex: 0 0 12px; width: 12px; height: 12px; border: 1px solid rgba(15,23,42,.16); border-radius: 50%; }
+.vlan-members, .vlan-assignments { margin: 12px 0 0; padding: 10px; border: 1px solid #dbe4ef; border-radius: 8px; background: white; }
+.vlan-members > b { margin-bottom: 7px; color: #334155; }
+.vlan-members label { display: flex; align-items: center; gap: 7px; margin: 5px 0; color: #334155; font-size: 12px; font-weight: 650; }
+.vlan-members input[type="checkbox"] { flex: 0 0 auto; width: 16px; min-height: 16px; height: 16px; margin: 0; padding: 0; }
+.vlan-assignments { margin-top: 12px; }
+.vlan-assignments h3 { margin: 0 0 8px; }
+.vlan-assignments label { display: flex; align-items: center; gap: 7px; margin: 5px 0; color: #334155; font-weight: 650; }
+.vlan-assignments input[type="checkbox"] { flex: 0 0 auto; width: 16px; min-height: 16px; height: 16px; margin: 0; padding: 0; }
+.vlan-assignments .empty-state { margin: 3px 0; }
+.vlan-node-highlight { fill-opacity: .16; stroke-opacity: .95; stroke-width: 3; filter: drop-shadow(0 0 4px rgba(15,23,42,.22)); }
+.shortcut-hint { margin: 9px 0 0; color: #64748b; font-size: 11px; line-height: 1.4; }
 .export-panel p { margin: 5px 0 11px; color: #64748b; font-size: 12px; line-height: 1.4; }
 .export-panel label { margin: 0 0 8px; }
 .export-panel input { margin-bottom: 4px; }
@@ -123,6 +167,7 @@ foreignObject input { height: 22px; margin: 0; border: 0; border-radius: 0; padd
 
 @media (max-width: 560px) {
   .side-stack { right: 8px; top: 8px; width: calc(100vw - 16px); }
+  .side-stack.sidebar-collapsed { width: 48px; }
   .toolbar { max-height: min(74vh, 660px); padding: 15px; border-radius: 12px; }
   .toolbar.expanded { max-height: calc(100vh - 16px); }
   .catalog-tools { align-items: flex-start; flex-direction: column; }

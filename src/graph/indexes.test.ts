@@ -16,6 +16,15 @@ describe('graph indexes', () => {
     expect(resolveEdge({ ...edge, targetPortId: 'missing' }, index)).toBeNull();
   });
 
+  it('indexes components in every assigned VLAN', () => {
+    const first = { ...node('first', 0, 'output'), vlanIds: ['vlan-10', 'vlan-20'] };
+    const second = { ...node('second', 200, 'input'), vlanIds: ['vlan-20'] };
+    const index = createGraphIndex([first, second]);
+
+    expect(index.nodesByVlanId.get('vlan-10')?.map(item => item.id)).toEqual(['first']);
+    expect(index.nodesByVlanId.get('vlan-20')?.map(item => item.id)).toEqual(['first', 'second']);
+  });
+
   it('matches existing geometry and reuses unchanged entries', () => {
     const source = node('source', 0, 'output'), target = node('target', 400, 'input');
     const first = createGeometryIndex([source, target]);
