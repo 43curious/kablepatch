@@ -30,6 +30,8 @@ export interface Node {
   label: string;
   category: string;
   headerColor: string;
+  /** Optional user-selected component icon. */
+  emoji?: string;
   /** Library template or preset this node came from, for catalog updates. */
   catalogId?: string;
   position: XY;

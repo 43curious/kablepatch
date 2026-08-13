@@ -1,0 +1,85 @@
+---
+import { createProject, deleteProject, listProjects, renameProject } from '../../server/projects';
+import { destroySession, verifyCsrf } from '../../server/auth';
+import '../../styles/dashboard.css';
+
+const session = Astro.locals.session!;
+let error = '';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  if (!verifyCsrf(Astro.request, session, form.get('csrf'))) error = 'The request could not be verified. Please reload and try again.';
+  else {
+    const action = String(form.get('action') ?? '');
+    if (action === 'logout') { destroySession(Astro.cookies); return Astro.redirect('/login/', 303); }
+    if (action === 'create') {
+      const result = createProject(session.user.id, form.get('title'));
+      if ('error' in result) error = result.error;
+      else return Astro.redirect(`/app/${result.id}/`, 303);
+    }
+    if (action === 'rename') {
+      if (!renameProject(session.user.id, String(form.get('projectId') ?? ''), form.get('title'))) error = 'The project could not be renamed.';
+      else return Astro.redirect('/app/', 303);
+    }
+    if (action === 'delete') {
+      deleteProject(session.user.id, String(form.get('projectId') ?? ''));
+      return Astro.redirect('/app/', 303);
+    }
+  }
+}
+const projects = listProjects(session.user.id);
+const initials = session.user.displayName.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase();
+const date = (timestamp: number) => new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric' }).format(timestamp);
+const size = (bytes: number) => bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
+---
+
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><meta name="description" content="Your Iko Connect projects." /><link rel="icon" href={`${import.meta.env.BASE_URL}favicon.svg`} type="image/svg+xml" /><title>Your projects — Iko Connect</title></head>
+  <body>
+    <header class="dashboard-header">
+      <a class="dashboard-brand" href="/"><span class="dashboard-mark"><i></i><i></i><i></i></span>Iko Connect</a>
+      <div class="account-menu"><span class="avatar">{initials}</span><div><b>{session.user.displayName}</b><small>{session.user.email}</small></div><form method="post"><input type="hidden" name="csrf" value={session.csrfToken} /><input type="hidden" name="action" value="logout" /><button>Sign out</button></form></div>
+    </header>
+    <main class="dashboard-shell">
+      <section class="dashboard-intro"><div><p>Workspace</p><h1>Your projects.</h1><span>Create a technical system, return to an existing design, or import a browser project.</span></div><div class="dashboard-nav-actions"><a class="manage-library-button" href="/app/library/">Manage library <span>↗</span></a><button class="new-project-trigger" data-open-create>New project <b>＋</b></button></div></section>
+      {error && <div class="dashboard-error" role="alert">{error}</div>}
+
+      <section class="project-section">
+        <header><h2>Recent projects</h2><span>{projects.length} project{projects.length === 1 ? '' : 's'}</span></header>
+        {projects.length ? <div class="project-grid">
+          {projects.map(project => <article class="project-card">
+            <a class="project-open" href={`/app/${project.id}/`} aria-label={`Open ${project.title}`}><div class="project-preview"><span></span><span></span><span></span><svg viewBox="0 0 220 110"><path d="M48 32 H97 V55 H167"/><path d="M48 77 H121 V83 H167"/></svg></div><h3>{project.title}</h3><p>Updated {date(project.updatedAt)} · {size(project.byteSize)}</p></a>
+            <details><summary aria-label={`Project actions for ${project.title}`}>•••</summary><div class="project-actions"><form method="post"><input type="hidden" name="csrf" value={session.csrfToken} /><input type="hidden" name="action" value="rename" /><input type="hidden" name="projectId" value={project.id} /><label>Rename<input name="title" value={project.title} maxlength="120" required /></label><button>Save name</button></form><form method="post" onsubmit="return confirm('Delete this project? This cannot be undone.')"><input type="hidden" name="csrf" value={session.csrfToken} /><input type="hidden" name="action" value="delete" /><input type="hidden" name="projectId" value={project.id} /><button class="delete-project">Delete project</button></form></div></details>
+          </article>)}
+        </div> : <div class="empty-projects"><span aria-hidden="true">⌘</span><h2>Your first system starts here.</h2><p>Create a project to open a clean diagram canvas.</p><button data-open-create>Create a project</button></div>}
+      </section>
+
+      <section class="local-import" data-local-import hidden><div><span aria-hidden="true">↥</span><div><h2>Browser project found</h2><p>Import the project previously stored in this browser into your account.</p></div></div><form data-import-form><input aria-label="Imported project name" value="Imported browser project" maxlength="120" required /><button>Import project</button></form><p data-import-message></p></section>
+    </main>
+
+    <dialog class="create-dialog" data-create-dialog><form method="post"><input type="hidden" name="csrf" value={session.csrfToken} /><input type="hidden" name="action" value="create" /><header><span>New project</span><button type="button" aria-label="Close" data-close-create>×</button></header><h2>What are you designing?</h2><p>Give the project a clear name. You can change it later.</p><label>Project name<input name="title" placeholder="Studio infrastructure" maxlength="120" required autofocus /></label><footer><button type="button" data-close-create>Cancel</button><button class="primary">Create and open</button></footer></form></dialog>
+
+    <script define:vars={{ csrf: session.csrfToken }}>
+      const dialog = document.querySelector('[data-create-dialog]');
+      document.querySelectorAll('[data-open-create]').forEach(button => button.addEventListener('click', () => dialog?.showModal()));
+      document.querySelectorAll('[data-close-create]').forEach(button => button.addEventListener('click', () => dialog?.close()));
+      const importPanel = document.querySelector('[data-local-import]');
+      const raw = localStorage.getItem('audiopatch-graph');
+      if (raw && importPanel) importPanel.hidden = false;
+      document.querySelector('[data-import-form]')?.addEventListener('submit', async event => {
+        event.preventDefault();
+        const message = document.querySelector('[data-import-message]');
+        try {
+          const documentData = JSON.parse(raw ?? 'null');
+          const title = event.currentTarget.querySelector('input').value;
+          const response = await fetch('/api/projects', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf }, body: JSON.stringify({ title, document: documentData }) });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error ?? 'Import failed');
+          localStorage.setItem('audiopatch-graph-imported', result.id);
+          location.href = `/app/${result.id}/`;
+        } catch (error) { if (message) message.textContent = error instanceof Error ? error.message : 'Import failed'; }
+      });
+    </script>
+  </body>
+</html>

@@ -9,6 +9,8 @@ import type { EdgeRouteInput, RoutedEdge } from './geometry';
 import { RoutingWorkerClient } from './routingWorkerClient';
 import FloatingToolbar from '../panels/FloatingToolbar';
 import type { CanvasDocument } from './share';
+import type { CanvasData } from '../../store/canvasDocument';
+import { canvasDataFromState } from '../../store/canvasDocument';
 import { createGeometryIndex, createGraphIndex, resolveEdges } from '../../graph/indexes';
 import type { GeometryIndex } from '../../graph/indexes';
 import { historyShortcut, shouldStartCanvasPan } from './canvasInteractions';
@@ -25,7 +27,9 @@ const sameRouteInput = (a: EdgeRouteInput | undefined, b: EdgeRouteInput) => !!a
   && a.sourceSide === b.sourceSide && a.targetSide === b.targetSide
   && JSON.stringify(a.waypoints ?? []) === JSON.stringify(b.waypoints ?? []);
 
-export default function Canvas() {
+type CloudProject = { id: string; title: string; document: CanvasData; revision: number; csrfToken: string };
+
+export default function Canvas({ project }: { project?: CloudProject }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const clipboard = useRef<Clipboard | null>(null);
   const pasteCount = useRef(0);
@@ -54,6 +58,7 @@ export default function Canvas() {
   const [readOnly, setReadOnly] = useState(false);
   const [routeVersion, setRouteVersion] = useState(0);
   const [routing, setRouting] = useState(false);
+  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'offline' | 'conflict'>('saved');
   const graphIndex = useMemo(() => createGraphIndex(s.nodes), [s.nodes]);
   const geometryIndex = useMemo(() => {
     const next = createGeometryIndex(s.nodes, geometryCache.current);
@@ -104,10 +109,27 @@ export default function Canvas() {
 
   useEffect(() => {
     const store = useCanvasStore.getState();
-    store.loadFromStorage();
-    let previous = useCanvasStore.getState(), saveTimer = 0;
-    const save = () => { saveTimer = 0; if (!readOnlyRef.current) useCanvasStore.getState().saveToStorage(); };
-    const schedule = () => { if (saveTimer) window.clearTimeout(saveTimer); saveTimer = window.setTimeout(save, 250); };
+    if (project) store.loadShared(project.document); else store.loadFromStorage();
+    let previous = useCanvasStore.getState(), saveTimer = 0, saving = false, queued = false, revision = project?.revision ?? 0;
+    const saveCloud = async () => {
+      if (!project || readOnlyRef.current) return;
+      if (saving) { queued = true; return; }
+      saving = true; setSaveState('saving');
+      try {
+        const response = await fetch(`/api/projects/${project.id}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': project.csrfToken },
+          body: JSON.stringify({ document: canvasDataFromState(useCanvasStore.getState()), revision }),
+        });
+        const result = await response.json() as { revision?: number };
+        if (response.status === 409) setSaveState('conflict');
+        else if (!response.ok || !result.revision) setSaveState('offline');
+        else { revision = result.revision; setSaveState('saved'); }
+      } catch { setSaveState('offline'); }
+      saving = false;
+      if (queued) { queued = false; void saveCloud(); }
+    };
+    const save = () => { saveTimer = 0; if (project) void saveCloud(); else if (!readOnlyRef.current) useCanvasStore.getState().saveToStorage(); };
+    const schedule = () => { if (saveTimer) window.clearTimeout(saveTimer); if (project) setSaveState('saving'); saveTimer = window.setTimeout(save, project ? 1200 : 250); };
     const unsubscribe = useCanvasStore.subscribe(next => {
       const documentChanged = next.nodes !== previous.nodes || next.edges !== previous.edges || next.spaces !== previous.spaces || next.vlans !== previous.vlans;
       const interactionCommitted = (!!previous.transaction && !next.transaction) || (!!previous.draggingNodeId && !next.draggingNodeId);
@@ -115,7 +137,7 @@ export default function Canvas() {
       previous = next;
     });
     const pageHide = () => { if (saveTimer) window.clearTimeout(saveTimer); save(); };
-    schedule();
+    if (!project) schedule();
     window.addEventListener('pagehide', pageHide);
     window.addEventListener('pointerup', clearDraft);
     return () => {
@@ -126,7 +148,7 @@ export default function Canvas() {
       window.removeEventListener('pagehide', pageHide);
       window.removeEventListener('pointerup', clearDraft);
     };
-  }, [clearDraft]);
+  }, [clearDraft, project]);
 
   const panStart = (e: React.PointerEvent<SVGSVGElement>) => {
     const insideGroup = !!(e.target as Element).closest('g');
@@ -159,13 +181,15 @@ export default function Canvas() {
     };
     svg.onpointerup = stop; svg.onpointercancel = stop;
   };
-  const wheel = (e: React.WheelEvent<SVGSVGElement>) => {
+  const wheel = useCallback((e: WheelEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     const viewport = wheelPending.current ?? useCanvasStore.getState().viewport;
     if (!e.ctrlKey && !e.metaKey) {
       wheelPending.current = { ...viewport, x: viewport.x - (e.shiftKey ? e.deltaY || e.deltaX : e.deltaX), y: viewport.y - (e.shiftKey ? 0 : e.deltaY) };
     } else {
-      const r = e.currentTarget.getBoundingClientRect();
+      const r = svgRef.current?.getBoundingClientRect();
+      if (!r) return;
       const world = { x: (e.clientX - r.left - viewport.x) / viewport.zoom, y: (e.clientY - r.top - viewport.y) / viewport.zoom };
       const zoom = Math.min(3, Math.max(0.2, viewport.zoom * Math.exp(-e.deltaY * 0.001)));
       wheelPending.current = { x: e.clientX - r.left - world.x * zoom, y: e.clientY - r.top - world.y * zoom, zoom };
@@ -175,7 +199,13 @@ export default function Canvas() {
       if (wheelPending.current) useCanvasStore.getState().setViewport(wheelPending.current);
       wheelPending.current = null;
     });
-  };
+  }, []);
+  useEffect(() => {
+    const canvas = svgRef.current;
+    if (!canvas) return;
+    canvas.addEventListener('wheel', wheel, { passive: false });
+    return () => canvas.removeEventListener('wheel', wheel);
+  }, [wheel]);
   const fit = useCallback(() => {
     const { nodes, setViewport } = useCanvasStore.getState();
     if (!svgRef.current || !nodes.length) return;
@@ -346,7 +376,8 @@ export default function Canvas() {
   }).filter(Boolean) as { name: string; color: string; x: number; y: number; w: number; h: number }[], [s.spaces, graphIndex, geometryIndex]);
 
   return <div className="app">
-    <svg ref={svgRef} className="canvas" onPointerDown={panStart} onPointerMove={moveDraft} onPointerUp={clearDraft} onWheel={wheel}>
+    {project && <header className="project-bar"><a href="/app/" aria-label={`Back to projects from ${project.title}`} title="Back to projects"><span aria-hidden="true">‹</span><b>{project.title}</b></a><span className={`save-status ${saveState}`} role="status" aria-label={saveState === 'saved' ? 'Project saved' : saveState === 'saving' ? 'Saving project' : saveState === 'conflict' ? 'Save conflict' : 'Project not saved'} title={saveState === 'saved' ? 'Saved' : saveState === 'saving' ? 'Saving…' : saveState === 'conflict' ? 'Conflict — reload or save a copy' : 'Not saved'}><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v6h8V4M8 20v-6h8v6"/></svg></span></header>}
+    <svg ref={svgRef} className="canvas" onPointerDown={panStart} onPointerMove={moveDraft} onPointerUp={clearDraft}>
       <defs>
         <filter id="nodeShadow"><feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.15" /></filter>
       </defs>
@@ -359,7 +390,7 @@ export default function Canvas() {
       </g>
     </svg>
     <div className="zoom-controls"><button onClick={() => s.setViewport({ ...s.viewport, zoom: Math.min(3, s.viewport.zoom * 1.2) })}>+</button><button onClick={() => s.setViewport({ ...s.viewport, zoom: Math.max(.2, s.viewport.zoom / 1.2) })}>−</button><button onClick={fit}>Fit</button><button onClick={() => s.setViewport({ x: 0, y: 0, zoom: 1 })}>100%</button></div>
-    {!readOnly && <FloatingToolbar svgRef={svgRef} onOpenCanvas={openDocument} onAutoAlign={() => { s.autoAlign(); requestAnimationFrame(fit); }} />}
+    {!readOnly && <FloatingToolbar svgRef={svgRef} projectId={project?.id} onOpenCanvas={openDocument} onAutoAlign={() => { s.autoAlign(); requestAnimationFrame(fit); }} />}
     {selectedResolvedEdge && <aside className="connection-info" aria-label="Selected cable connection"><header><div><b>Connection</b><span>{SIGNAL_TYPES[selectedResolvedEdge.sourcePort.signalType].label}</span></div>{!readOnly && <button aria-label="Close connection details" title="Close" onClick={() => s.selectEdge(null)}>×</button>}</header><div className="connection-route"><section><small>From</small><strong>{selectedResolvedEdge.sourceNode.label}</strong><span>{selectedResolvedEdge.sourcePort.label}</span></section><span className="connection-arrow" aria-hidden="true">→</span><section><small>To</small><strong>{selectedResolvedEdge.targetNode.label}</strong><span>{selectedResolvedEdge.targetPort.label}</span></section></div></aside>}
     {routing && !s.draggingNodeId && <div className="routing-badge">Routing cables…</div>}
     {readOnly && <div className="read-only-badge">Read-only view</div>}

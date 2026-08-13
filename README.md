@@ -1,6 +1,6 @@
 # Iko Connect
 
-Astro diagram editor with deterministic orthogonal cable routing. Auto-align keeps allocated spaces contiguous, leaves two grid snaps between components, and prioritizes clear cable runs. Ethernet switches default to top-mounted bidirectional ports, a bottom name stripe, and compact 45-degree labels; Ethernet ports on other components use a centered bottom rail.
+Astro diagram editor with database-backed user accounts, private per-user projects, autosave, and deterministic orthogonal cable routing. Auto-align keeps allocated spaces contiguous, leaves two grid snaps between components, and prioritizes clear cable runs. Ethernet switches default to top-mounted bidirectional ports, a bottom name stripe, and compact 45-degree labels; Ethernet ports on other components use a centered bottom rail.
 
 ## Commands
 
@@ -11,6 +11,15 @@ npm test
 npm run test:watch
 npm run build
 ```
+
+Development uses a local SQLite database at `.data/iko-connect.sqlite`. Override it with `IKO_DATABASE_PATH`. Production builds use Astro's standalone Node adapter; deploy the generated Node server with persistent storage for SQLite, or replace `src/server/db.ts` with a managed database adapter before scaling to multiple instances.
+
+Routes:
+
+- `/` — product landing page
+- `/login/` and `/register/` — account access
+- `/app/` — authenticated project workspace
+- `/app/[id]/` — project editor
 
 ## Routing
 

@@ -1,0 +1,51 @@
+---
+import { authenticateUser, createSession, isSameOrigin } from '../server/auth';
+import '../styles/account.css';
+
+let error = '';
+const requestedNext = Astro.url.searchParams.get('next') ?? '/app/';
+const nextPath = requestedNext.startsWith('/app/') || requestedNext === '/app' ? requestedNext : '/app/';
+let email = '';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  email = String(form.get('email') ?? '');
+  const password = String(form.get('password') ?? '');
+  const submittedNext = String(form.get('next') ?? '/app/');
+  const safeNext = submittedNext.startsWith('/app/') || submittedNext === '/app' ? submittedNext : '/app/';
+  if (!isSameOrigin(Astro.request)) error = 'The request could not be verified. Please try again.';
+  else {
+    const user = await authenticateUser(email, password);
+    if (user) { createSession(user.id, Astro.cookies); return Astro.redirect(safeNext, 303); }
+    error = 'Email or password is incorrect.';
+  }
+}
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Sign in to your Iko Connect workspace." />
+    <link rel="icon" href={`${import.meta.env.BASE_URL}favicon.svg`} type="image/svg+xml" />
+    <title>Sign in — Iko Connect</title>
+  </head>
+  <body>
+    <main class="auth-shell">
+      <a class="auth-brand" href="/"><span class="auth-mark"><i></i><i></i><i></i></span>Iko Connect</a>
+      <section class="auth-card">
+        <header><span class="auth-icon" aria-hidden="true">↗</span><p>Welcome back</p><h1>Sign in to your workspace.</h1><span>Open your projects and continue where you left off.</span></header>
+        {error && <div class="auth-error" role="alert">{error}</div>}
+        <form method="post">
+          <input type="hidden" name="next" value={nextPath} />
+          <label>Email address<input type="email" name="email" value={email} autocomplete="email" maxlength="254" required autofocus /></label>
+          <label>Password<input type="password" name="password" autocomplete="current-password" maxlength="256" required /></label>
+          <button type="submit">Sign in <span aria-hidden="true">→</span></button>
+        </form>
+        <footer>New to Iko Connect? <a href="/register/">Create an account</a></footer>
+      </section>
+      <p class="auth-note">Your session uses a secure, HTTP-only cookie.</p>
+    </main>
+  </body>
+</html>

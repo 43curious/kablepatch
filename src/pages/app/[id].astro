@@ -1,0 +1,25 @@
+---
+import Canvas from '../../components/canvas/Canvas';
+import { getProject } from '../../server/projects';
+import '../../styles/global.css';
+
+const session = Astro.locals.session!;
+const project = getProject(session.user.id, Astro.params.id ?? '');
+if (!project) return new Response('Project not found', { status: 404 });
+const cloudProject = { id: project.id, title: project.title, document: project.document, revision: project.revision, csrfToken: session.csrfToken };
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} />
+    <meta name="theme-color" content="#f8fafc" />
+    <meta name="robots" content="noindex,nofollow" />
+    <link rel="icon" href={`${import.meta.env.BASE_URL}favicon.svg`} type="image/svg+xml" />
+    <title>{project.title} — Iko Connect</title>
+  </head>
+  <body>
+    <Canvas project={cloudProject} client:only="react" />
+  </body>
+</html>

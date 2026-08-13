@@ -1,16 +1,183 @@
 ---
-import Canvas from '../components/canvas/Canvas';
-import '../styles/global.css';
+import '../styles/landing.css';
+import '../styles/landing-bento.css';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const appUrl = `${base}/app/` || '/app/';
+
+const workflows = [
+  { number: '01', title: 'Build your library', text: 'Start with built-in broadcast, audio, video, and infrastructure devices. Customize a template or save your own reusable presets.' },
+  { number: '02', title: 'Lay out the system', text: 'Place components on an infinite canvas, group equipment into physical spaces, and use cable-aware auto alignment when the diagram grows.' },
+  { number: '03', title: 'Connect every signal', text: 'Join compatible ports and let deterministic orthogonal routing create clear, stable cable runs around your equipment.' },
+  { number: '04', title: 'Inspect and deliver', text: 'Review ports and VLAN membership, add notes and name overlays, then export the diagram or a connection schedule.' },
+];
+
+const features = [
+  { icon: 'route', title: 'Clear cable routing', text: 'Obstacle-aware orthogonal paths, reserved connector exits, stable cable lanes, crossing reports, and automatic rerouting after placement.', className: 'feature-wide' },
+  { icon: 'two-click', title: 'Connect with two clicks', text: 'Click a source port, then click a compatible destination. Iko Connect completes and routes the cable without requiring a precise drag.' },
+  { icon: 'library', title: 'A library that becomes yours', text: 'Search built-in devices, organize categories, customize templates, and create presets with typed input, output, and bidirectional port groups.' },
+  { icon: 'spaces', title: 'Spaces and rooms', text: 'Group equipment by physical location, color-code each space, move a complete room together, and keep spaces contiguous during auto alignment.' },
+  { icon: 'vlan', title: 'Visual VLAN planning', text: 'Create VLAN IDs, assign any component with an Ethernet port, and select a VLAN to highlight every member on the canvas.' },
+  { icon: 'inspect', title: 'Component-level control', text: 'Inspect names, categories, colors, spaces, VLANs, notes, connector types, port sides, quantities, and reusable name-overlay layers.' },
+  { icon: 'signals', title: 'Signal-aware connections', text: 'Model analog and digital audio, MADI, Dante, SDI, HDMI, Ethernet, USB, MIDI, GPIO, power, fiber, and more.', className: 'feature-wide feature-signals' },
+  { icon: 'canvas', title: 'Made for large canvases', text: 'Pan, zoom, fit, copy, paste, undo, and auto-align without losing the structure of the system.' },
+];
+
+const essentials = [
+  ['Pan, zoom, and fit', 'Navigate large systems quickly without changing routing geometry.'],
+  ['Undo and redo', 'Move confidently through up to 50 recent document states.'],
+  ['Copy and paste', 'Duplicate selected equipment and its internal connections.'],
+  ['Automatic saving', 'Keep the current project and custom library in browser storage.'],
+  ['Technical notes', 'Keep installation context directly on each component.'],
+  ['Manual and spec links', 'Attach documentation URLs or open a focused specification search.'],
+  ['Color and name layers', 'Use component colors and switchable port-name overlays for different audiences.'],
+  ['Open or merge', 'Replace the canvas with a project file or merge another editable system into it.'],
+];
+
+const outputs = [
+  { label: 'SVG', title: 'Presentation-ready diagrams', text: 'Download a scalable graphic that stays sharp in documentation and design reviews.' },
+  { label: 'CSV', title: 'Connection schedules', text: 'Export source devices, source ports, signal types, destinations, and notes for spreadsheets.' },
+  { label: 'JSON', title: 'Editable project files', text: 'Back up a complete canvas or merge another editable diagram into the current project.' },
+  { label: 'LOCK', title: 'Protected view files', text: 'Create password-encrypted, read-only project files for controlled handoff and review.' },
+];
 ---
 
-<html lang="es">
+<!doctype html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="generator" content={Astro.generator} />
-    <title>AudioPatch</title>
+    <meta name="description" content="Iko Connect is a local-first diagram editor for broadcast, audio, video, network, and technical signal systems." />
+    <meta name="theme-color" content="#f5f5f7" />
+    <meta property="og:title" content="Iko Connect — Technical systems, clearly connected" />
+    <meta property="og:description" content="Build equipment libraries, route technical signals, plan spaces and VLANs, and export complete system documentation." />
+    <meta property="og:type" content="website" />
+    <link rel="icon" href={`${import.meta.env.BASE_URL}favicon.svg`} type="image/svg+xml" />
+    <title>Iko Connect — Technical systems, clearly connected</title>
   </head>
   <body>
-    <Canvas client:only="react" />
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="Iko Connect home">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span>Iko Connect</span>
+      </a>
+      <nav aria-label="Main navigation">
+        <a href="#workflow">Workflow</a>
+        <a href="#features">Features</a>
+        <a href="#deliver">Deliver</a>
+      </nav>
+      <a class="header-cta" href={appUrl}>Open editor <span aria-hidden="true">↗</span></a>
+    </header>
+
+    <main id="top">
+      <section class="hero shell">
+        <div class="hero-copy">
+          <p class="eyebrow"><span></span> Open-source audiovisual technical diagrams</p>
+          <h1>Every system.<br /><em>Clearly connected.</em></h1>
+          <p class="hero-lede">Design broadcast, audio, video, and network infrastructure with a component library, signal-aware ports, dependable cable routing, spaces, VLANs, and documentation tools—all in your browser.</p>
+          <div class="hero-actions">
+            <a class="button button-primary" href={appUrl}>Open the diagram editor <span aria-hidden="true">→</span></a>
+            <a class="button button-secondary" href="#workflow">See how it works</a>
+          </div>
+          <ul class="hero-notes" aria-label="Product highlights">
+            <li><span>✓</span> Private project workspace</li>
+            <li><span>✓</span> Automatic project saving</li>
+            <li><span>✓</span> Editable exports</li>
+          </ul>
+        </div>
+
+        <div class="product-frame product-image-slot">
+          <div class="product-image-hint"><b>Product screenshot</b><span>Place hero-editor.webp in public/product/</span></div>
+          <img src="/product/hero-editor.webp" alt="Iko Connect diagram editor" onerror="this.hidden=true" />
+        </div>
+      </section>
+
+      <section class="signal-strip" aria-label="Supported system disciplines">
+        <div class="shell signal-inner">
+          <p>One canvas for the complete signal chain</p>
+          <ul><li>Audio</li><li>Video</li><li>Network</li><li>Control</li><li>Power</li><li>Fiber</li></ul>
+        </div>
+      </section>
+
+      <section class="section shell" id="workflow">
+        <div class="section-intro">
+          <p class="eyebrow"><span></span> From idea to handoff</p>
+          <h2>A workflow built around how technical systems are actually assembled.</h2>
+          <p>Start with equipment, connect real ports, organize the physical and network layers, then deliver useful documentation.</p>
+        </div>
+        <ol class="workflow-grid">
+          {workflows.map(item => <li><span class="step-number">{item.number}</span><h3>{item.title}</h3><p>{item.text}</p></li>)}
+        </ol>
+      </section>
+
+      <section class="section section-tinted" id="features">
+        <div class="shell">
+          <div class="section-intro compact">
+            <p class="eyebrow"><span></span> Purpose-built tools</p>
+            <h2>Detail when you need it.<br />Clarity everywhere else.</h2>
+          </div>
+          <div class="feature-grid">
+            {features.map(feature => <article class={feature.className ?? ''}>
+              <div class={`feature-art art-${feature.icon} product-feature-image`}>
+                <span>{feature.title}<small>{`public/product/feature-${feature.icon}.webp`}</small></span>
+                <img src={`/product/feature-${feature.icon}.webp`} alt={`${feature.title} in Iko Connect`} loading="lazy" decoding="async" onerror="this.hidden=true" />
+              </div>
+              <div class="feature-copy"><h3>{feature.title}</h3><p>{feature.text}</p>
+              </div>
+            </article>)}
+          </div>
+        </div>
+      </section>
+
+      <section class="section shell essentials-section">
+        <div class="section-intro compact">
+          <p class="eyebrow"><span></span> Everyday editing</p>
+          <h2>The essentials are already built in.</h2>
+        </div>
+        <div class="essentials-grid">
+          {essentials.map(([title, text]) => <article><span aria-hidden="true">✓</span><div><h3>{title}</h3><p>{text}</p></div></article>)}
+        </div>
+      </section>
+
+      <section class="section shell local-section">
+        <div class="local-copy">
+          <p class="eyebrow"><span></span> Your workspace</p>
+          <h2>Every project has a place.</h2>
+          <p>Sign in to a private workspace where each system is stored as its own project. Autosave keeps the active document current, while editable exports give you a portable backup whenever you need one.</p>
+          <div class="local-facts"><span><b>Automatic</b> project persistence</span><span><b>50 levels</b> of working history</span><span><b>Encrypted</b> view-file option</span></div>
+        </div>
+        <div class="local-visual" aria-hidden="true">
+          <div class="privacy-ring ring-one"></div><div class="privacy-ring ring-two"></div>
+          <div class="privacy-core"><span>⌂</span><b>Private project</b><small>Your account</small></div>
+          <span class="orbit orbit-a">JSON</span><span class="orbit orbit-b">SVG</span><span class="orbit orbit-c">CSV</span>
+        </div>
+      </section>
+
+      <section class="section section-dark" id="deliver">
+        <div class="shell">
+          <div class="section-intro compact inverse">
+            <p class="eyebrow"><span></span> Documentation included</p>
+            <h2>Deliver more than a drawing.</h2>
+            <p>Move from design to installation, review, and archival without rebuilding your system information somewhere else.</p>
+          </div>
+          <div class="output-grid">
+            {outputs.map(output => <article><span>{output.label}</span><h3>{output.title}</h3><p>{output.text}</p></article>)}
+          </div>
+        </div>
+      </section>
+
+      <section class="cta-section shell">
+        <div><p class="eyebrow"><span></span> Start connecting</p><h2>Turn the next system into a diagram everyone can follow.</h2></div>
+        <a class="button button-primary" href={appUrl}>Open Iko Connect <span aria-hidden="true">→</span></a>
+      </section>
+    </main>
+
+
+    <footer class="site-footer shell">
+      <a class="brand" href="#top"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span>Iko Connect</span></a>
+      <p>Technical systems, clearly connected.</p>
+      <a href={appUrl}>Open editor <span aria-hidden="true">↗</span></a>
+    </footer>
   </body>
 </html>

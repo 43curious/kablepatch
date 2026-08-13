@@ -96,7 +96,8 @@ function CanvasNode({ node, geometry, selected, highlightColor, readOnly = false
       <rect width={w} height={h} fill="#fff" stroke={selected ? '#2196F3' : '#e0e0e0'} strokeWidth={selected ? 2 : 1} filter="url(#nodeShadow)" />
       <rect className="node-header" width={w} height={HEADER_HEIGHT} fill={node.headerColor} onPointerDown={startDrag} />
       <rect y={24} width={w} height={10} fill={node.headerColor} onPointerDown={startDrag} />
-      <text className="node-header-label" x={10} y={22} fill="#fff" fontSize={13} fontWeight={700} onPointerDown={startDrag} onDoubleClick={() => !readOnly && setRenaming(true)}>{node.label}</text>
+      {node.emoji && <text x={10} y={22} fill="#fff" fontSize={14} pointerEvents="none">{node.emoji}</text>}
+      <text className="node-header-label" x={node.emoji ? 31 : 10} y={22} fill="#fff" fontSize={13} fontWeight={700} onPointerDown={startDrag} onDoubleClick={() => !readOnly && setRenaming(true)}>{node.label}</text>
       {renaming && <foreignObject x={6} y={5} width={w - 12} height={25}><input autoFocus defaultValue={node.label} onBlur={e => { updateNode(node.id, { label: e.currentTarget.value }); setRenaming(false); }} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} /></foreignObject>}
       <line x1={w / 2} y1={HEADER_HEIGHT} x2={w / 2} y2={h - (ethernet.length ? GRID * 2 : 8)} stroke="#eee" />
       {inputs.map(p => { const y = positionOf(p.id).y - node.position.y; return <g key={p.id}><text x={12} y={y + 4} fontSize={11} fill="#555">{label(p)}</text>{dot(p, 0, y)}</g>; })}

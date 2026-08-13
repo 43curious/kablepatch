@@ -28,7 +28,7 @@ interface CanvasState {
   past: Snapshot[];
   future: Snapshot[];
   addNode: (type: string, position: XY) => void;
-  addCustomNode: (label: string, inputs: (string | Pick<Port, 'label' | 'signalType' | 'position'>)[], outputs: (string | Pick<Port, 'label' | 'signalType' | 'position'>)[], position: XY, category?: string, catalogId?: string, bidirectional?: (string | Pick<Port, 'label' | 'signalType' | 'position'>)[]) => void;
+  addCustomNode: (label: string, inputs: (string | Pick<Port, 'label' | 'signalType' | 'position'>)[], outputs: (string | Pick<Port, 'label' | 'signalType' | 'position'>)[], position: XY, category?: string, catalogId?: string, bidirectional?: (string | Pick<Port, 'label' | 'signalType' | 'position'>)[], emoji?: string) => void;
   pasteNodes: (nodes: Node[], edges: Edge[], offset: XY) => void;
   importCanvas: (data: Snapshot & { viewport: Viewport }) => void;
   updateCatalogCategory: (catalogId: string, category: string, label?: string) => void;
@@ -257,11 +257,11 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   past: [],
   future: [],
   addNode: (type, position) => set(s => ({ ...withHistory(s), nodes: [...s.nodes, firstFree(makeNode(type, position), s.nodes)], geometryRevision: s.geometryRevision + 1 })),
-  addCustomNode: (label, inputs, outputs, position, category = 'Custom', catalogId, bidirectional = []) => set(s => {
+  addCustomNode: (label, inputs, outputs, position, category = 'Custom', catalogId, bidirectional = [], emoji) => set(s => {
     const layout = catalogId === 'ethernet-switch' ? 'ethernet-switch' as const : undefined;
     const switchLabels = bidirectional.filter(Boolean).flatMap(x => typeof x === 'string' ? expandLabels([x]).map(label => ({ label, signalType: 'ethernet' as const, position: 'top' as const })) : [{ label: x.label, signalType: 'ethernet' as const, position: x.position === 'bottom' ? 'bottom' as const : 'top' as const }]);
     const switchPorts = layout === 'ethernet-switch' ? switchLabels.map(({ label, signalType, position }) => ({ id: nanoid(8), label, side: 'bidirectional' as const, position, signalType })) : [];
-    const node = { id: nanoid(8), label: label || 'Custom Device', category, headerColor: CATEGORY_COLORS[category] ?? CATEGORY_COLORS.Custom, catalogId, layout, position: snapXY(position), ports: [...inputs.filter(Boolean).flatMap(x => typeof x === 'string' ? expandLabels([x]).map(y => port(y, 'input')) : [customPort(x, 'input')]), ...outputs.filter(Boolean).flatMap(x => typeof x === 'string' ? expandLabels([x]).map(y => port(y, 'output')) : [customPort(x, 'output')]), ...(switchPorts.length ? switchPorts : bidirectional.filter(Boolean).flatMap(x => typeof x === 'string' ? expandLabels([x]).map(y => port(y, 'bidirectional', 'left')) : [customPort(x, 'bidirectional')]))], notes: '' };
+    const node = { id: nanoid(8), label: label || 'Custom Device', category, headerColor: CATEGORY_COLORS[category] ?? CATEGORY_COLORS.Custom, emoji, catalogId, layout, position: snapXY(position), ports: [...inputs.filter(Boolean).flatMap(x => typeof x === 'string' ? expandLabels([x]).map(y => port(y, 'input')) : [customPort(x, 'input')]), ...outputs.filter(Boolean).flatMap(x => typeof x === 'string' ? expandLabels([x]).map(y => port(y, 'output')) : [customPort(x, 'output')]), ...(switchPorts.length ? switchPorts : bidirectional.filter(Boolean).flatMap(x => typeof x === 'string' ? expandLabels([x]).map(y => port(y, 'bidirectional', 'left')) : [customPort(x, 'bidirectional')]))], notes: '' };
     return { ...withHistory(s), nodes: [...s.nodes, firstFree(node, s.nodes)], geometryRevision: s.geometryRevision + 1 };
   }),
   pasteNodes: (copies, copiedEdges, offset) => set(s => {

@@ -1,0 +1,17 @@
+---
+import LibraryManager from '../../components/library/LibraryManager';
+import '../../styles/library-manager.css';
+const session = Astro.locals.session!;
+const requestedReturn = Astro.url.searchParams.get('from');
+const returnTo = requestedReturn && /^\/app\/[A-Za-z0-9_-]+\/$/.test(requestedReturn) ? requestedReturn : '/app/';
+const returnLabel = returnTo === '/app/' ? 'Projects' : 'Back to project';
+---
+
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><meta name="robots" content="noindex,nofollow" /><link rel="icon" href={`${import.meta.env.BASE_URL}favicon.svg`} type="image/svg+xml" /><title>Manage library — Iko Connect</title></head>
+  <body>
+    <header class="manager-header"><a class="manager-brand" href={returnTo}><span>‹</span><b>{returnLabel}</b></a><div><span>{session.user.displayName}</span><a href={returnTo}>{returnLabel}</a></div></header>
+    <LibraryManager client:only="react" />
+  </body>
+</html>

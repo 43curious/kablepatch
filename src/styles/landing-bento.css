@@ -1,0 +1,29 @@
+.feature-grid { gap: 14px; }
+.feature-grid article { display: flex; min-height: 475px; overflow: hidden; flex-direction: column; padding: 0; border: 1px solid rgba(60,60,67,.08); border-radius: 26px; background: #f5f5f7; box-shadow: inset 0 1px 0 rgba(255,255,255,.75); transition: transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s ease; }
+.feature-grid article:hover { box-shadow: 0 22px 55px rgba(0,0,0,.09); transform: translateY(-4px); }
+.feature-art { position: relative; display: grid; flex: 0 0 255px; overflow: hidden; place-items: center; border-bottom: 1px solid rgba(60,60,67,.07); background-color: #e9ebf0; background-image: var(--product-image); background-position: center; background-size: cover; }
+.feature-wide .feature-art { flex-basis: 270px; }
+.feature-art::after { position: absolute; inset: 0; border: 1px solid rgba(255,255,255,.5); pointer-events: none; content: ""; }
+.feature-art > span { padding: 8px 11px; border: 1px solid rgba(60,60,67,.1); border-radius: 9px; color: #6e6e73; background: rgba(255,255,255,.9); font-size: 11px; font-weight: 650; text-align: center; }.feature-art > span small{display:block;margin-top:4px;color:#8e8e93;font-size:8px;font-weight:500}.feature-art>img{position:absolute;z-index:1;inset:0;width:100%;height:100%;object-fit:cover}
+.feature-copy { position: relative; z-index: 2; padding: 27px 28px 29px; }
+.feature-grid h3 { margin: 0 0 10px; font-size: 21px; }
+.feature-grid p { max-width: 560px; }
+.feature-signals { color: white; background: #1d1d1f !important; box-shadow: inset 0 1px 0 rgba(255,255,255,.08) !important; }
+.feature-signals .feature-art { border-color: rgba(255,255,255,.08); background-color: #25262a; }
+.feature-signals h3 { color: white; }
+.feature-signals p { color: #b7b7bd; }
+
+@media (max-width: 1050px) {
+  .feature-grid article { min-height: 465px; }
+}
+@media (max-width: 720px) {
+  .feature-grid article { min-height: 440px; }
+  .feature-art, .feature-wide .feature-art { flex-basis: 235px; }
+  .feature-copy { padding: 24px; }
+}
+@media (max-width: 420px) {
+  .feature-grid article { border-radius: 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .feature-grid article { transition: none; }
+}
